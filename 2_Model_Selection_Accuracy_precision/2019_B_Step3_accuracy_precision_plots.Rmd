@@ -1,0 +1,138 @@
+---
+title: "Elemental map"
+author: "Neil"
+date: "17 March 2017"
+output:
+    ]
+  html_document: 
+  pandoc_args: [
+      "+RTS", "-K64m",
+      "-RTS"
+editor_options: 
+  chunk_output_type: console
+---
+
+#Setup
+code not shown
+import data, set hooks for webgl, subset edges and times, remove any 'n' using 'use column, make sure time points are correct
+```{r include=FALSE}
+
+
+rm(list=ls())
+# getwd tells us where R is looking
+getwd()
+#setwd tells R where to look
+#setwd('/Volumes/PHD/R_script/Microchemistry/Dec2016')
+
+
+setwd("E:/Otolith_chem_paper/Elemental_maps")
+
+dat<- read.csv('chem414.csv')
+library(AID)
+library(vegan)
+library(MASS)
+library(corrplot)
+library(fields)
+library(PMCMR)
+library(gamm4)
+library(GISTools)
+library(SDMTools)
+library(maps)
+library(mapdata)
+library(PBSmapping)
+library(plyr)
+library(raster)
+library(rgdal)
+library(spatial.tools)
+library(RColorBrewer)
+library(rgeos)
+library(rasterVis)
+library(rgl)
+#library(gstat)
+library(sampling)
+library(pROC)
+library(flux)
+
+source("sdm_functions.R")
+
+## spatial extent etc set-up
+# 
+# full.ext<- extent(c(-8, -3, 52, 60))
+# ###coord system to assign
+# WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# #### projection
+# mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
+# bathT<- raster('F:/R_script/SDM/full_area_time/layers_output/bath.grd')
+# base<- readOGR(dsn='F:/R_script/SDM', layer="full")
+# 
+# land<- readOGR(dsn= "F:/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
+# land<- spTransform(land, CRS(WGS84))
+# land<- crop(land, full.ext)
+# base<- crop(base, full.ext)
+# 
+# 
+# landT<- spTransform(land, CRS(mrc))
+# baseT<- spTransform(base, CRS(mrc))
+# bathT<- crop(bathT, landT)# crop this here as it has already been transformed
+
+```
+
+
+# Precision vs acc plots
+
+```{r}
+#acc114<-read.csv('F:/R_script/Microchemistry/Elemental_maps/accs114.csv')
+acc414<-read.csv('E:/Otolith_chem_paper/Elemental_maps/accs414.csv')
+
+### maximise theta
+theta<- acc414$Acur + rev(acc414$Precis)
+which(theta==max(theta), arr.ind=T)
+th<- which(theta==max(theta), arr.ind=T)
+
+#head(acc114)
+head(acc414)
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Acc_prec.pdf",width=4, height=4)
+
+par(mar=c(4,4,0,0)+0.1)
+
+plot(Acur~ Precis, data=acc414, type='n', xlab='Precision', ylab= 'Accuracy', xaxt='n')
+axis(1, at= seq(0,1, by=0.2), labels= c('1.0', '0.8','0.6','0.4','0.2','0.0'))
+abline(a=0,b=1, lty=2, lwd=3, col='grey55')
+acc414[th,]
+mthet<-acc414[th,]
+
+lines(Acur~ Precis, data=acc414, lwd=2, col='black')
+points(Acur~Precis, data=acc414, pch=24, bg= 'black', cex=1)
+segments(mthet[[2]], mthet[[3]], mthet[[2]], mthet[[2]], col='grey50', lwd=1.5)
+segments(-0.1, mthet[[3]], mthet[[2]], mthet[[3]], col='grey50', lwd=1.5)
+#lines(Acur~Precis, data=acc114, lwd=2, col='red3')
+#points(1-Acur~1-Precis, data=acc414, pch=21, bg='red3')
+
+dev.off()
+
+#legend('bottomright', legend=c("March 2014 baseline model", "October 2014 baseline model"),
+ #      col=c("slateblue3", "red3"),lty=c(1,1), pch=c(24, 21), pt.bg=c("slateblue3", "red3"),
+ #      bty='n')
+
+### look to see what precision is at 90% acc and 80% acc
+#
+
+#414
+int<- acc414$Acur[which.min(abs(acc414$Acur - 0.75))]
+acc414$Precis[which(acc414$Acur==int, arr.ind=T)]
+
+int<- acc414$Acur[which.min(abs(acc414$Acur - 0.8))]
+acc414$Precis[which(acc414$Acur==int, arr.ind=T)]
+
+#90%
+int<- acc414$Acur[which.min(abs(acc414$Acur - 0.9))]
+acc414$Precis[which(acc414$Acur==int, arr.ind=T)]
+
+flux::auc(acc414$Precis, acc414$Acur)
+
+
+```
+
+
+#end
