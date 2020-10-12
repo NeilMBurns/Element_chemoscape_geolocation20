@@ -1,0 +1,995 @@
+---
+title: "Step1 - Fit spatial GAM to otolith chemistry"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# Setup
+```{r setup}
+# Reset R's brain
+rm(list=ls())
+# getwd tells us where R is looking
+getwd()
+# setwd tells R where to look
+#setwd("Home directory")
+getwd()
+
+############################## libraries #####################################################
+
+## not all these packages are required this is just my standard set
+library(gamm4)
+library(fields)
+library(KernSmooth)
+library(GISTools)
+library(maps)
+library(mapdata)
+library(RgoogleMaps)
+library(PBSmapping)
+library(plyr)
+library(raster)
+library(rgdal)
+library(RColorBrewer)
+library(rgeos)
+library(AID)
+library(cvTools)
+library(spatstat)
+library(ggplot2)
+library(fitdistrplus)
+library(caret)
+
+
+####################################### map extents ########################################################
+
+full.ext<- extent(c(-10, -2, 52, 60))
+
+
+
+################################## coord system to assign ####################################################
+WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
+#### projection
+mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
+
+
+
+```
+
+# Element data
+```{r}
+
+########dat<- read.csv('C:/Users/neilm/Documents/GitHub/Element_Isoscape_geolocation20/Data_1040.csv')
+## dat<- read.csv(LOAD THE DATA)
+
+chem<- subset(dat, dat$Sample=='Age-0_edge')
+head(chem)
+
+
+```
+
+
+# make elements sp object
+```{r}
+
+coords.tmp<- cbind(chem$Longitude, chem$Latitude)
+## create spdf object
+chem.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(chem),
+                                   proj4string = CRS(WGS84))
+
+#### trim biological layers to fit extent
+chem.spdfT<- crop(chem.spdf, full.ext)
+chem.spdfT<- spTransform(chem.spdfT, CRS(mrc))
+
+```
+
+
+# Rasteize elemental data
+```{r}
+
+
+######################################bath.r<- raster('C:/Users/neilm/Documents/GitHub/Element_Isoscape_geolocation20/1_Isoscape_creation/model_landscape.grd')
+
+
+# bath.r<- raster(##### read in the model_landscape.grd file) ## I used a bathymetry grid to create the base for the landscape.
+
+plot(bath.r)
+
+
+```
+
+
+
+#make prediction data
+```{r Generate prediction data}
+
+ depth.v<- as.data.frame(bath.r, xy=T)
+# 
+ newdat<- cbind(depth.v)
+ colnames(newdat)[1:3]<- c('x', 'y', 'depth')
+# 
+ head(newdat)
+
+```
+
+
+#sample site plots
+```{r}
+
+
+ coords.tmp<- cbind(chem$long, chem$lat)
+ ## create spdf object
+ samples.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(chem),
+                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+
+```
+
+
+#Soap film knots
+# bounding box, knots and extra area variables
+```{r}
+
+
+plot(bath.r) # here is the bath.r boundary
+bath.spdf<- rasterToPolygons(bath.r, dissolve=TRUE) # turn this into polygons - might want to do this earlier if i need higher resolution
+plot(bath.spdf)
+outline<- gUnaryUnion(bath.spdf,id=NULL) #get outline of bath.spdf
+plot(outline)
+
+outline.coords<- fortify(outline) # use fortify from ggplot to get the coords
+plot(outline.coords$long, outline.coords$lat)
+points(outline.coords[1,1], outline.coords[1,2], col='blue', pch=19) # here is the first point
+points(outline.coords[2,1], outline.coords[2,2], col='pink', pch=19) # and 2
+
+points(outline.coords[nrow(outline.coords),1], outline.coords[nrow(outline.coords),2], col='red', pch=19) # last point is one of the other loops
+
+points(outline.coords[1:861,1], outline.coords[1:861,2], col='green', pch=19) # this is the 'last' point in the main loop
+points(outline.coords[862,1], outline.coords[862,2], col='black', pch=19) # this one is another loop, 'skye'
+
+outline.coords<- outline.coords[1:861,1:2]
+head(outline.coords)
+
+
+
+
+bound <- list(list(x =outline.coords[,1], y = outline.coords[,2]))
+
+str(bound[[1]]$x)
+
+#sort out bound first
+#soap_check(bound) -- google soap check for this & download
+
+
+
+### now choose the location of knots - try just the center point of each cell in bath
+
+
+space= 5.5 ### increase this to increase spacing between knots
+knots<- rasterToPoints(aggregate(bath.r, fact=space), spatial=TRUE)
+names(knots)
+str(knots)
+head(knots)
+
+
+plot(knots, cex=0.5, pch=19)
+points(outline.coords, col='red', pch=1, cex=0.8)
+
+## use gIntersection to remove knots right on the edge
+buff.outline<- gBuffer(outline, width=-8000)
+
+plot(outline)
+plot(buff.outline, add=T, col='red')
+
+knots<- gIntersection(knots, buff.outline)
+knots<- coordinates(knots)
+
+plot(knots, cex=0.5, pch=19)
+points(outline.coords, col='red', pch=1, cex=0.8)
+
+knots<- as.data.frame(knots)
+
+plot(knots, cex=0.5, pch=19)
+points(outline.coords, col='red', pch=1, cex=0.8)
+
+#soap_check(bound, knots)
+
+
+
+```
+
+
+
+#gam fitting
+```{r}
+
+
+# use transformed chemistry data
+datr<- as.data.frame(chem.spdfT, xy=T)
+names(datr)[24:25] <- c('x', 'y')
+
+### each spatially variable element is fitted to a GAM here to keep the code clean - CV code is below
+names(datr)
+summary(datr$Na)
+
+
+Na1<-gam(Na~   s(x, y, bs='so', xt =list(bnd=bound)),
+         data = datr, family = gaussian, knots=knots)
+
+
+
+ Mg1<- gam(Mg~   s(x, y, bs='so', xt =list(bnd=bound)),
+           data = datr, family = gaussian, knots=knots)
+
+ 
+ 
+   Ba1<-gam(Ba~   s(x, y, bs='so', xt =list(bnd=bound)),
+            data = datr,  family=Gamma, knots=knots)
+    
+
+
+
+Sr1<- gam(Sr~   s(x, y, bs='so', xt =list(bnd=bound)),
+          data = datr, family = gaussian, knots=knots)
+
+
+
+ 
+ 
+ Mn1<-gam(Mn~  s(x, y, bs='so', xt =list(bnd=bound)),
+         data = datr, family = Gamma, knots=knots)
+ 
+
+
+   Rb1<-gam(Rb~   s(x, y, bs='so', xt =list(bnd=bound)) ,
+             data = datr, family = Gamma, knots=knots)
+
+
+
+
+```
+
+
+
+#model predictions
+```{r}
+
+
+levels=1000
+#Na
+predNa<-as.data.frame(predict(Na1, se.fit=TRUE, newdata=newdat,  type="response"))
+predNa<- cbind(predNa, newdat[,1:2])
+head(predNa)
+
+predNa<-na.omit(predNa)
+
+
+coords.tmp<- cbind(predNa$x, predNa$y)
+predNa.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(predNa), proj4string = CRS(mrc))
+pNa<- rasterize(predNa.spdf, bath.r , 'fit')
+eNa<- rasterize(predNa.spdf, bath.r , 'se.fit')
+image(pNa, main="predicted abundance",  col = topo.colors(levels))
+
+#Mg
+predMg<-as.data.frame(predict(Mg1, se.fit=TRUE, newdata=newdat,  type="response"))
+predMg<- cbind(predMg, newdat[,1:2])
+head(predMg)
+predMg<-na.omit(predMg)
+
+summary(predMg$fit)
+
+coords.tmp<- cbind(predMg$x, predMg$y)
+predMg.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(predMg), proj4string = CRS(mrc))
+pMg<- rasterize(predMg.spdf, bath.r , 'fit')
+eMg<- rasterize(predMg.spdf, bath.r , 'se.fit')
+image(pMg, main="predicted abundance",  col = topo.colors(levels))
+
+
+
+#Ba
+predBa<-as.data.frame(predict(Ba1, se.fit=TRUE, newdata=newdat,  type="response"))
+predBa<- cbind(predBa, newdat[,1:2])
+head(predBa)
+predBa<-na.omit(predBa)
+summary(predBa$fit)
+
+coords.tmp<- cbind(predBa$x, predBa$y)
+predBa.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(predBa), proj4string = CRS(mrc))
+
+pBa<- rasterize(predBa.spdf, bath.r , 'fit')
+eBa<- rasterize(predBa.spdf, bath.r , 'se.fit')
+image(pBa, main="predicted abundance",  col = topo.colors(levels))
+
+
+#Sr
+predSr<-as.data.frame(predict(Sr1, se.fit=TRUE, newdata=newdat,  type="response"))
+predSr<- cbind(predSr, newdat[,c(1:2)])
+head(predSr)
+predSr<-na.omit(predSr)
+
+summary(predSr$fit)
+
+coords.tmp<- cbind(predSr$x, predSr$y)
+predSr.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(predSr), proj4string = CRS(mrc))
+pSr<- rasterize(predSr.spdf, bath.r , 'fit')
+eSr<- rasterize(predSr.spdf, bath.r , 'se.fit')
+image(pSr, main="predicted abundance", col = topo.colors(levels))
+
+#Mn
+predMn<-as.data.frame(predict(Mn1, se.fit=TRUE, newdata=newdat,  type="response"))
+predMn<- cbind(predMn, newdat[,c(1:2)])
+head(predMn)
+predMn<-na.omit(predMn)
+
+summary(predMn$fit)
+
+coords.tmp<- cbind(predMn$x, predMn$y)
+predMn.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(predMn), proj4string = CRS(mrc))
+pMn<- rasterize(predMn.spdf, bath.r , 'fit')
+eMn<- rasterize(predMn.spdf, bath.r , 'se.fit')
+image(pMn, main="predicted abundance", col = topo.colors(levels))
+
+
+#Rb
+predRb<-as.data.frame(predict(Rb1, se.fit=TRUE, newdata=newdat,  type="response"))
+predRb<- cbind(predRb, newdat[,c(1:2)])
+head(predRb)
+predRb<-na.omit(predRb)
+
+summary(predRb$fit)
+
+coords.tmp<- cbind(predRb$x, predRb$y)
+predRb.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(predRb), proj4string = CRS(mrc))
+pRb<- rasterize(predRb.spdf, bath.r , 'fit')
+eRb<- rasterize(predRb.spdf, bath.r , 'se.fit')
+image(pRb, main="predicted abundance", col = topo.colors(levels))
+
+
+
+```
+
+
+
+#CV data split
+Here is the loop used to creat the CV for the GAMs
+```{r}
+
+# CV - Na
+first.run <- TRUE
+
+R=100
+
+for (i in 1:R)
+{
+  # Split the data randomly into training data and testing data
+  set.seed(i)
+  
+  lab<- c(1:nrow(datr))
+  trainIndex <- createDataPartition(lab, p = 0.75,
+                                  list = FALSE,
+                                  times = 1)
+  train <- datr[ trainIndex,]
+  test  <- datr[-trainIndex,]
+  
+  
+  # Use the train dataset and the final model to make predictions for the test data
+  Nat<-gam(Na~   s(x, y, bs='so', xt =list(bnd=bound)),
+         data = train, family = gaussian, knots=knots)
+ 
+  preds <- as.vector(predict(Nat, newdata = test,
+                                 type = "response"))
+  
+ #Bind the predictions to the test dataset
+  N.preds <- cbind(test, 'preds'=preds)
+  
+  if (first.run)
+  {
+    N.spearmans <- N.preds
+    
+  } else {
+    N.spearmans <- rbind(N.spearmans, N.preds)
+  }
+  
+  
+  if (first.run)
+  {
+    Pmeans<- aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)
+    
+    first.run <- FALSE
+  } else {
+    Pmeans <- cbind(Pmeans, aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)[,2])
+  }
+}
+
+## Plot and stats
+Tmeans<- aggregate(datr$Na, by=list(datr$HaulID), FUN=mean)[,2]
+allPmeans<- apply(Pmeans[,-1], MARGIN=1,FUN=mean)
+
+plot(Tmeans, allPmeans, pch=18, cex=3)
+for(i in 2:R){
+  points(jitter(Tmeans, factor=80), Pmeans[,i], col='blue')
+}
+points(Tmeans,allPmeans, pch=18, cex=3, col='yellow')
+
+cor.test(rank(Tmeans),rank(allPmeans), method='spearman')
+
+  
+#Mg
+
+
+
+first.run <- TRUE
+
+R=100
+for (i in 1:R)
+{
+  # Split the data randomly into training data and testing data
+  set.seed(i)
+  
+  lab<- c(1:nrow(datr))
+  trainIndex <- createDataPartition(lab, p = 0.75,
+                                  list = FALSE,
+                                  times = 1)
+  train <- datr[ trainIndex,]
+  test  <- datr[-trainIndex,]
+  
+  
+  # Use the train dataset and the final model to make predictions for the test data
+  Mgt<- gam(Mg~   s(x, y, bs='so', xt =list(bnd=bound)),
+           data = train, family = gaussian, knots=knots)
+ 
+  preds <- as.vector(predict(Mgt, newdata = test,
+                                 type = "response"))
+  
+ #Bind the predictions to the test dataset
+  N.preds <- cbind(test, 'preds'=preds)
+  
+  if (first.run)
+  {
+    N.spearmans <- N.preds
+    
+  } else {
+    N.spearmans <- rbind(N.spearmans, N.preds)
+  }
+  
+  
+  if (first.run)
+  {
+    Pmeans<- aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)
+    
+    first.run <- FALSE
+  } else {
+    Pmeans <- cbind(Pmeans, aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)[,2])
+  }
+}
+
+## Plot and stats
+Tmeans<- aggregate(datr$Mg, by=list(datr$HaulID), FUN=mean)[,2]
+allPmeans<- apply(Pmeans[,-1], MARGIN=1,FUN=mean)
+
+plot(Tmeans, allPmeans, pch=18, cex=3)
+for(i in 2:R){
+  points(jitter(Tmeans, factor=80), Pmeans[,i], col='blue')
+}
+points(Tmeans,allPmeans, pch=18, cex=3, col='yellow')
+
+cor.test(rank(Tmeans),rank(allPmeans), method='spearman')
+
+  
+#Ba  
+
+
+first.run <- TRUE
+
+R=100
+for (i in 1:R)
+{
+  # Split the data randomly into training data and testing data
+  set.seed(i)
+  
+   lab<- c(1:nrow(datr))
+   trainIndex <- createDataPartition(lab, p = 0.75,
+                                   list = FALSE,
+                                   times = 1)
+   train <- datr[ trainIndex,]
+   test  <- datr[-trainIndex,]
+  
+  #s=sampling::strata(datr,strataname=c("HaulID"),size=rep(1, length(unique(datr$HaulID))), method="srswor")
+ # test<- getdata(datr,s)
+  trainIndex<-as.numeric(rownames(test))
+  #train<- datr[-trainIndex,]
+  
+  # Use the train dataset and the final model to make predictions for the test data
+  Bat<-gam(Ba~   s(x, y, bs='so', xt =list(bnd=bound)),
+            data = train, family = Gamma, knots=knots)
+ 
+  preds <- as.vector(predict(Bat, newdata = test,
+                                 type = "response"))
+  
+ #Bind the predictions to the test dataset
+  N.preds <- cbind(test, 'preds'=preds)
+  
+  if (first.run)
+  {
+    N.spearmans <- N.preds
+    
+  } else {
+    N.spearmans <- rbind(N.spearmans, N.preds)
+  }
+  
+  
+  if (first.run)
+  {
+    Pmeans<- aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)
+    
+    first.run <- FALSE
+  } else {
+    Pmeans <- cbind(Pmeans, aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)[,2])
+  }
+}
+
+## Plot and stats
+Tmeans<- aggregate(datr$Ba, by=list(datr$HaulID), FUN=mean)[,2]
+allPmeans<- apply(Pmeans[,-1], MARGIN=1,FUN=mean)
+
+plot(Tmeans, allPmeans, pch=18, cex=3)
+for(i in 2:R){
+  points(jitter(Tmeans, factor=80), Pmeans[,i], col='blue')
+}
+points(Tmeans,allPmeans, pch=18, cex=3, col='yellow')
+
+cor.test(rank(Tmeans),rank(allPmeans), method='spearman')
+
+#Sr
+
+
+first.run <- TRUE
+
+R=100
+for (i in 1:R)
+{
+  # Split the data randomly into training data and testing data
+  set.seed(i)
+  
+  lab<- c(1:nrow(datr))
+  trainIndex <- createDataPartition(lab, p = 0.75,
+                                  list = FALSE,
+                                  times = 1)
+  train <- datr[ trainIndex,]
+  test  <- datr[-trainIndex,]
+  
+  
+  # Use the train dataset and the final model to make predictions for the test data
+  Srt<- gam(Sr~   s(x, y, bs='so', xt =list(bnd=bound)),
+          data = train, family = gaussian, knots=knots)
+ 
+  preds <- as.vector(predict(Srt, newdata = test,
+                                 type = "response"))
+  
+ #Bind the predictions to the test dataset
+  N.preds <- cbind(test, 'preds'=preds)
+  
+  if (first.run)
+  {
+    N.spearmans <- N.preds
+    
+  } else {
+    N.spearmans <- rbind(N.spearmans, N.preds)
+  }
+  
+  
+  if (first.run)
+  {
+    Pmeans<- aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)
+    
+    first.run <- FALSE
+  } else {
+    Pmeans <- cbind(Pmeans, aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)[,2])
+  }
+}
+
+## Plot and stats
+Tmeans<- aggregate(datr$Sr, by=list(datr$HaulID), FUN=mean)[,2]
+allPmeans<- apply(Pmeans[,-1], MARGIN=1,FUN=mean)
+
+plot(Tmeans, allPmeans, pch=18, cex=3)
+for(i in 2:R){
+  points(jitter(Tmeans, factor=80), Pmeans[,i], col='blue')
+}
+points(Tmeans,allPmeans, pch=18, cex=3, col='yellow')
+
+cor.test(rank(Tmeans),rank(allPmeans), method='spearman')
+
+# Mn
+
+first.run <- TRUE
+
+R=100
+for (i in 1:R)
+{
+  # Split the data randomly into training data and testing data
+  set.seed(i)
+  
+  lab<- c(1:nrow(datr))
+  trainIndex <- createDataPartition(lab, p = 0.75,
+                                  list = FALSE,
+                                  times = 1)
+  train <- datr[ trainIndex,]
+  test  <- datr[-trainIndex,]
+  
+  
+  # Use the train dataset and the final model to make predictions for the test data
+ Mnt<-gam(Mn~   s(x, y, bs='so', xt =list(bnd=bound)),
+         data = train, family = Gamma, knots=knots)
+ 
+  preds <- as.vector(predict(Mnt, newdata = test,
+                                 type = "response"))
+  
+ #Bind the predictions to the test dataset
+  N.preds <- cbind(test, 'preds'=preds)
+  
+  if (first.run)
+  {
+    N.spearmans <- N.preds
+    
+  } else {
+    N.spearmans <- rbind(N.spearmans, N.preds)
+  }
+  
+  
+  if (first.run)
+  {
+    Pmeans<- aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)
+    
+    first.run <- FALSE
+  } else {
+    Pmeans <- cbind(Pmeans, aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)[,2])
+  }
+}
+
+## Plot and stats
+Tmeans<- aggregate(datr$Mn, by=list(datr$HaulID), FUN=mean)[,2]
+allPmeans<- apply(Pmeans[,-1], MARGIN=1,FUN=mean)
+
+plot(Tmeans, allPmeans, pch=18, cex=3)
+for(i in 2:R){
+  points(jitter(Tmeans, factor=80), Pmeans[,i], col='blue')
+}
+points(Tmeans,allPmeans, pch=18, cex=3, col='yellow')
+
+cor.test(rank(Tmeans),rank(allPmeans), method='spearman')
+
+
+
+#Rb
+
+
+
+first.run <- TRUE
+
+R=100
+for (i in 1:R)
+{
+  # Split the data randomly into training data and testing data
+  set.seed(i)
+  
+  lab<- c(1:nrow(datr))
+  trainIndex <- createDataPartition(lab, p = 0.75,
+                                  list = FALSE,
+                                  times = 1)
+  train <- datr[ trainIndex,]
+  test  <- datr[-trainIndex,]
+  
+  
+  # Use the train dataset and the final model to make predictions for the test data
+  Rbt<-gam(Rb~   s(x, y, bs='so', xt =list(bnd=bound)) ,
+            data = train, family = Gamma, knots=knots)
+ 
+  preds <- as.vector(predict(Rbt, newdata = test,
+                                 type = "response"))
+  
+ #Bind the predictions to the test dataset
+  N.preds <- cbind(test, 'preds'=preds)
+  
+  if (first.run)
+  {
+    N.spearmans <- N.preds
+    
+  } else {
+    N.spearmans <- rbind(N.spearmans, N.preds)
+  }
+  
+  
+  if (first.run)
+  {
+    Pmeans<- aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)
+    
+    first.run <- FALSE
+  } else {
+    Pmeans <- cbind(Pmeans, aggregate(N.spearmans$preds, by=list(N.spearmans$HaulID), FUN=mean)[,2])
+  }
+}
+
+## Plot and stats
+Tmeans<- aggregate(datr$Rb, by=list(datr$HaulID), FUN=mean)[,2]
+allPmeans<- apply(Pmeans[,-1], MARGIN=1,FUN=mean)
+
+plot(Tmeans, allPmeans, pch=18, cex=3)
+for(i in 2:R){
+  points(jitter(Tmeans, factor=80), Pmeans[,i], col='blue')
+}
+points(Tmeans,allPmeans, pch=18, cex=3, col='yellow')
+
+cor.test(rank(Tmeans),rank(allPmeans), method='spearman')
+
+
+
+```
+
+
+# covariance check
+```{r}
+
+
+##try corriplot
+rNa<-sample(Na1$residuals, size =112, replace =FALSE)
+rMg<-sample(Mg1$residuals, size =112, replace =FALSE)
+rBa<-sample(Ba1$residuals, size =112, replace =FALSE)
+rSr<-sample(Sr1$residuals, size =112, replace =FALSE)
+rMn<-sample(Mn1$residuals, size =112, replace =FALSE)
+rRb<-sample(Rb1$residuals, size =112, replace =FALSE)
+
+resid<- cbind(rNa, rMg, rBa, rSr, rMn, rRb)
+colnames(resid)<- c("Na", "Mg",  "Ba", "Sr", "Mn", "Rb")
+head(resid)
+cors<- cor(resid)
+
+col2 <- colorRampPalette(c("#67001F", "#B2182B", "#D6604D", "#F4A582",
+"#FDDBC7", "#FFFFFF", "#D1E5F0", "#92C5DE",
+"#4393C3", "#2166AC", "#053061"))
+
+
+
+corrplot(cors, method='color', type='upper', diag=FALSE, order='original', col=col2(100), addCoef.col = "grey")
+
+
+```
+
+
+# Plot data and layers
+```{r}
+
+spec<-colorRampPalette(rev(brewer.pal(11,'Spectral')))
+
+
+
+######## plot environmental data
+L <- parse(text = paste(c(8,6,4), "*degree ~W", sep = "")) # longitudes
+LN<- parse(text = paste(c(52:60), "*degree ~N", sep = "")) #lats
+
+# extract coords for the tick marks
+longs<- c(-2.5,-4,-6,-8,-10 )
+lats<- c(54.5, 54.5, 54.5, 54.5, 54.5)
+S <- SpatialPoints(cbind(longs,lats), CRS(WGS84))
+
+ST<- spTransform(S, CRS(mrc))
+coordinates(ST)
+
+longs<- c(-6.5,-6.5,-6.5,-6.5,-6.5, -6.5, -6.5, -6.5, -6.5 )
+lats<- c(52, 53, 54, 55, 56, 57, 58, 59, 60)
+S <- SpatialPoints(cbind(longs,lats), CRS(WGS84))
+
+ST<- spTransform(S, CRS(mrc))
+plot(ST)
+coordinates(ST)
+
+
+######## plot element layers
+
+#Na
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pNa, col = spec(1000), zlim= c(minValue(pNa),maxValue(pNa)), add=T)
+plot(landT, add =T, col = 'cornsilk3')
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(pNa, horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Na- er
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eNa, col = spec(1000), zlim= c(minValue(eNa),maxValue(eNa)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(scale(eNa, center=F, scale=F), horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#####Mg
+
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pMg, col =spec(1000), zlim= c(minValue(pMg),maxValue(pMg)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(pMg, horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Mg- er
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eMg, col = spec(1000), zlim= c(minValue(eMg),maxValue(eMg)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+
+#Legend
+plot(scale(eMg, center=F, scale=F), horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Ba
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pBa, col = spec(1000), zlim= c(minValue(pBa),maxValue(pBa)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(pBa, horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Ba- er
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eBa, col = spec(1000), zlim= c(minValue(eBa),maxValue(eBa)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(scale(eBa, center=F, scale=F), horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+
+
+#Sr
+
+
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pSr, col = spec(1000), zlim= c(minValue(pSr),maxValue(pSr)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(pSr, horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Sr- er
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eSr, col = spec(1000), zlim= c(minValue(eSr),maxValue(eSr)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(scale(eSr, center=F, scale=F), horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+
+###Mn
+
+
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pMn, col = spec(1000), zlim= c(minValue(pMn),maxValue(pMn)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(pMn, horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Mn- er
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eMn, col = spec(1000), zlim= c(minValue(eMn),maxValue(eMn)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(scale(eMn, center=F, scale=F), horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+
+###Rb
+
+
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pRb, col = spec(1000), zlim= c(minValue(pRb),maxValue(pRb)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(pRb, horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+#Rb- er
+#par(mfrow=c(2,2))
+par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eRb, col = spec(1000), zlim= c(minValue(eRb),maxValue(eRb)), add=T)
+plot(chem.spdfT, add=T, pch=19, col='black', cex=2.5)
+
+axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+abline(h=-1057535.2)
+axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+#Legend
+plot(scale(eRb, center=F, scale=F), horizontal=F,  smallplot= c(0.6,0.62,0.2,0.8), col = spec(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+
+
+```
