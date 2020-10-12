@@ -1,0 +1,329 @@
+---
+title: "Full area/time pull data together"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# Setup
+```{r setup}
+# Reset R's brain
+rm(list=ls())
+# getwd tells us where R is looking
+getwd()
+# setwd tells R where to look
+setwd("")
+getwd()
+
+############################## libraries #####################################################
+library(gamm4)
+library(fields)
+library(KernSmooth)
+library(GISTools)
+library(SDMTools)
+library(maps)
+library(mapdata)
+library(maptools)
+library(RgoogleMaps)
+library(PBSmapping)
+library(plyr)
+library(raster)
+library(rgdal)
+library(spatial.tools)
+library(RColorBrewer)
+library(rgeos)
+library(AID)
+library(gamclass)
+library(cvTools)
+library(spatstat)
+library(ggplot2)
+library(fitdistrplus)
+library(caret)
+
+
+
+
+####################################### map extents ########################################################
+
+
+full.ext<- extent(c(-10, -2, 52, 60))
+
+
+################################## coord system to assign ####################################################
+WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
+#### projection
+mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
+
+
+#######
+
+###  OS maps Britain_Proj_Dist shape file required for this code
+
+
+################################# basic background maps of land and sea #####################################
+
+#### use shape files generated from 'make_extentshp' code use rgdal to read it in to get projections
+base<- readOGR(dsn='File path', layer="full")
+
+plot(base)
+base<- crop(base, full.ext)
+
+land<- readOGR(dsn= "File path", layer ='Britain_Proj_Dist')
+land<- spTransform(land, CRS(WGS84))
+land<- crop(land, full.ext)
+
+
+plot(base, col ='cornflowerblue')
+plot(land, col='cornsilk', add=T)
+
+###################################
+### apply projection to sea area and land from above
+landT<- spTransform(land, CRS(mrc))
+baseT<- spTransform(base, CRS(mrc))
+
+```
+
+# Element data
+```{r}
+
+#dat<- read.csv('read in data file')
+
+chem<- subset(dat, dat$Sample=='Age-0_edge')
+
+
+```
+
+
+
+# make elements sp object
+```{r}
+
+coords.tmp<- cbind(chem$long, chem$lat)
+## create spdf object
+chem.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(chem),
+                                   proj4string = CRS(WGS84))
+
+#### trim biological layers to fit extent
+chem.spdfT<- crop(chem.spdf, full.ext)
+chem.spdfT<- spTransform(chem.spdfT, CRS(mrc))
+
+
+
+```
+
+
+
+
+
+
+# Plot data and layers
+```{r}
+
+#bath
+bath.r<- raster('F:/R_script/Microchemistry/Elemental_maps/Env_layers/bath.grd')
+
+plot(bath.r)
+################################# basic background maps of land and sea #####################################
+
+#### use shape files generated from 'make_extentshp' code use rgdal to read it in to get projections
+#scot<- readOGR(dsn="/Volumes/PHD/R_script/SDM", layer="scot")
+base<- readOGR(dsn='F:/R_script/SDM', layer="full")
+# base<- readOGR(dsn='/Volumes/PHD/R_script/SDM', layer="full")
+
+plot(base)
+base<- crop(base, full.ext)
+
+land<- readOGR(dsn= "F:/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
+#land<- readOGR(dsn= "/Volumes/PHD/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
+land<- spTransform(land, CRS(WGS84))
+land<- crop(land, full.ext)
+
+
+plot(base, col ='cornflowerblue')
+plot(land, col='cornsilk', add=T)
+
+###################################
+### apply projection to sea area and land from above
+landT<- spTransform(land, CRS(mrc))
+baseT<- spTransform(base, CRS(mrc))
+
+#read in data layers for speed - save from full step 1 code
+
+# pSr<- raster('modelSr_414.grd')
+# eSr<- raster('er_modelSr_414')
+# pMn<- raster('modelMn_414.grd')
+# eMn<- raster('er_modelMn_414')
+
+
+
+
+##Temp cols
+display.brewer.all()
+
+area.shades<- brewer.pal(9,'Set1')
+#spec<- brewer.pal(11,'Spectral')
+spec<-colorRampPalette(rev(brewer.pal(11,'Spectral')))
+dave.heat<- colorRampPalette(rev(brewer.pal(9,'Blues')[4:9]))
+temp.col<- colorRampPalette(rev(c(brewer.pal(9, 'YlOrRd'), brewer.pal(9, 'RdPu')[7:9])))
+
+
+######## plot environmental data
+L <- parse(text = paste(c(8,6,4), "*degree ~W", sep = "")) # longitudes
+LN<- parse(text = paste(c(52:60), "*degree ~N", sep = "")) #lats
+
+# extract coords for the tick marks
+longs<- c(-2.5,-4,-6,-8,-10 )
+lats<- c(54.5, 54.5, 54.5, 54.5, 54.5)
+S <- SpatialPoints(cbind(longs,lats), CRS(WGS84))
+
+ST<- spTransform(S, CRS(mrc))
+plot(ST)
+coordinates(ST)
+
+longs<- c(-6.5,-6.5,-6.5,-6.5,-6.5, -6.5, -6.5, -6.5, -6.5 )
+lats<- c(52, 53, 54, 55, 56, 57, 58, 59, 60)
+S <- SpatialPoints(cbind(longs,lats), CRS(WGS84))
+
+ST<- spTransform(S, CRS(mrc))
+plot(ST)
+coordinates(ST)
+
+##get sizes of all cells in raster [km2]
+cell_size <-raster::area(pSr, na.rm=TRUE, weights=FALSE)
+
+#delete NAs from vector of all raster cells
+##NAs lie outside of the rastered region, can thus be omitted
+cell_size<-cell_size[!is.na(cell_size)]
+#compute area [km2] of all cells in geo_raster
+raster_area<-length(cell_size)*median(cell_size)
+
+```
+
+##plot Sr
+```{r}
+#Sr
+
+gr.bl<- colorRampPalette(brewer.pal(9,'GnBu'), bias=0.6)
+
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Sr_pred.pdf",width=7.2, height=11.6)
+
+par(mar=c(0,0,0,0)+0.1)
+
+
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pSr, col = gr.bl(1000), zlim= c(minValue(eSr),maxValue(pSr)), add=T)
+plot(landT, add =T, col = 'grey70')
+plot(chem.spdfT, add=T, pch=19, col='black', cex=4)
+
+dev.off()
+
+#axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+#abline(h=-1057535.2)
+#axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+#axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+gr.bl<- colorRampPalette(brewer.pal(9,'GnBu'), bias=1)
+
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Sr_leg.pdf",width=7.2, height=11.6)
+
+par(mar=c(0,0,0,0)+0.1)
+
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) 
+
+#Legend
+plot(pSr, horizontal=F, zlim= c(minValue(eSr),maxValue(pSr)),  smallplot= c(0.6, 0.62, 0.2, 0.8), col = gr.bl(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+dev.off()
+
+gr.bl<- colorRampPalette(brewer.pal(9,'GnBu'), bias=1.3)
+
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Sr_err.pdf",width=7.2, height=11.6)
+
+par(mar=c(0,0,0,0)+0.1)
+
+#Sr- er
+#par(mfrow=c(2,2))
+#par(mar = c(5,6,4,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eSr, col = gr.bl(1000), zlim= c(minValue(eSr),maxValue(pSr)), add=T)
+plot(landT, add =T, col = 'grey70')
+plot(chem.spdfT, add=T, pch=19, col='black', cex=4)
+
+dev.off()
+
+
+
+
+```
+
+##Plot Mn
+```{r}
+
+gr.bl<- colorRampPalette(brewer.pal(9,'GnBu'), bias=1.5)
+
+
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Mn_pred.pdf",width=7.2, height=11.6)
+
+par(mar=c(0,0,0,0)+0.1)
+#par(mfrow=c(2,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(pMn, col = gr.bl(1000), zlim= c(minValue(eMn),maxValue(eMn)), add=T)
+plot(landT, add =T, col = 'grey70')
+plot(chem.spdfT, add=T, pch=19, col='black', cex=4)
+
+dev.off()
+
+
+# axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+# abline(h=-1057535.2)
+# axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+# axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+gr.bl<- colorRampPalette(brewer.pal(9,'GnBu'), bias=1)
+
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Mn_leg.pdf",width=7.2, height=11.6)
+
+par(mar=c(0,0,0,0)+0.1)
+
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA)
+#Legend
+plot(pMn, horizontal=F,  zlim= c(minValue(eMn),maxValue(eMn)), smallplot= c( 0.6, 0.62, 0.2, 0.8),  col = gr.bl(1000),legend.only=TRUE,  axis.args = list(cex.axis = 2))
+
+
+dev.off()
+
+gr.bl<- colorRampPalette(brewer.pal(9,'GnBu'), bias=0.6)
+
+
+pdf(file="E:/Otolith_chem_paper/Comms_biology_paper/Figs/Mn_err.pdf",width=7.2, height=11.6)
+
+par(mar=c(0,0,0,0)+0.1)
+
+#Mn- er
+#par(mfrow=c(2,2))
+image(pNa, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA) ###use image to keep plot in same 'window' for plotting - plot() extends plotting area
+image(eMn, col = gr.bl(1000), zlim= c(minValue(eMn),maxValue(eMn)), add=T)
+plot(landT, add =T, col = 'grey70')
+plot(chem.spdfT, add=T, pch=19, col='black', cex=4)
+# 
+# axis(1, at=c( -890555.9, -667916.9, -445278.0), L, lwd.ticks=1, cex.axis=2, padj=0.8)
+# abline(h=-1057535.2)
+# axis(2, at=c(6800125, 6982998, 7170156, 7361866, 7558416, 7760119, 7967318, 8180387, 8399738), labels=LN, lwd.ticks=1, pos=-1057535.2, las=1,cex.axis=2)
+# axis(4, at=c(6800125,8399738), labels=NA, lwd.ticks=0, pos=-278298.7)
+#axis(3, at=c(-1066000,-333000), labels=NA, lwd.ticks=0, pos=8404000)
+
+
+dev.off()
+
+
+
+
+
+```
