@@ -22,38 +22,41 @@ rm(list=ls())
 # getwd tells us where R is looking
 getwd()
 #setwd tells R where to look
-#setwd('/Volumes/PHD/R_script/Microchemistry/Dec2016')
 
 
-setwd('F:/R_script/Microchemistry/Elemental_maps')
-
-dat<- read.csv('chem414.csv')
 library(AID)
 library(vegan)
 library(MASS)
 library(corrplot)
 library(fields)
-library(PMCMR)
+library(PMCMRplus)
 library(gamm4)
 library(GISTools)
-library(SDMTools)
 library(maps)
 library(mapdata)
 library(PBSmapping)
 library(plyr)
 library(raster)
 library(rgdal)
-library(spatial.tools)
 library(RColorBrewer)
 library(rgeos)
 library(rasterVis)
 library(rgl)
-library(gstat)
+#library(gstat)
 library(sampling)
 library(pROC)
 library(flux)
 
-source("sdm_functions.R")
+
+
+dat<- read.csv('C:/Users/neilm/Documents/GitHub/Element_Isoscape_geolocation20/Data_1040.csv')
+
+## dat<- read.csv(LOAD THE DATA)
+
+ed4.14<- subset(dat, dat$Sample=='Age-0_edge')
+head(ed4.14)
+
+
 
 ## spatial extent etc set-up
 # 
@@ -62,18 +65,20 @@ full.ext<- extent(c(-8, -3, 52, 60))
 WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
 #### projection
 mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
-bathT<- raster('F:/R_script/SDM/full_area_time/layers_output/bath.grd')
-base<- readOGR(dsn='F:/R_script/SDM', layer="full")
-
-land<- readOGR(dsn= "F:/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
-land<- spTransform(land, CRS(WGS84))
-land<- crop(land, full.ext)
-base<- crop(base, full.ext)
 
 
-landT<- spTransform(land, CRS(mrc))
-baseT<- spTransform(base, CRS(mrc))
-bathT<- crop(bathT, landT)# crop this here as it has already been transformed
+######bathT<- raster('F:/R_script/SDM/full_area_time/layers_output/bath.grd')
+#######<- readOGR(dsn='F:/R_script/SDM', layer="full")
+
+######land<- readOGR(dsn= "F:/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
+#land<- spTransform(land, CRS(WGS84))
+#land<- crop(land, full.ext)
+#base<- crop(base, full.ext)
+
+
+#landT<- spTransform(land, CRS(mrc))
+#baseT<- spTransform(base, CRS(mrc))
+#bathT<- crop(bathT, landT)# crop this here as it has already been transformed
 
 # dat<- subset(dat, dat$use=='y')
 # summary(dat$Area)
@@ -117,54 +122,53 @@ bathT<- crop(bathT, landT)# crop this here as it has already been transformed
 #                 110 - E IS
 #                 112 - W IS
 #                 115 - inner clyde
-table(dat$HaulF, dat$Area)
-region<- dat$Area
 
-#region<-as.factor(dat$Haul_id)
-# levels(region) <- c("Cl",  
-#                     "Scot", 
-#                     "Scot",
-#                     "Scot", 
-#                     "EIS",
-#                     "WIS", "Cl")
- ed4.14<-cbind(dat, region)
+############################# come back here if we need region names
+#table(dat$HaulF, dat$Area)
+#region<- dat$Area
+
+region<-as.factor(ed4.14$HaulID)
+
+ ed4.14<-cbind(ed4.14, region)
 
 ```
 
 # pull in surfaces and er
 ```{r}
 
+
 # smoothed rasters
 #normal
-Na<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelNa_414.gri')
-Na.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelNa_414.gri')
+Na<- raster('GAM_chemoscapes/modelNa_414.gri')
+Na.er<- raster('GAM_chemoscapes/er_modelNa_414.gri')
 
-Mg<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelMg_414.gri')
-Mg.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelMg_414.gri')
+Mg<- raster('GAM_chemoscapes/modelMg_414.gri')
+Mg.er<- raster('GAM_chemoscapes/er_modelMg_414.gri')
 
-P<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelP_414.gri')
-P.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelP_414.gri')
+##########P<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelP_414.gri')
+###########P.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelP_414.gri')
 
-Ba<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelBa_414.gri')
-Ba.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelBa_414.gri')
+Ba<- raster('GAM_chemoscapes/modelBa_414.gri')
+Ba.er<- raster('GAM_chemoscapes/er_modelBa_414.gri')
 
-Sr<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelSr_414.gri')
-Sr.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSr_414.gri')
+Sr<- raster('GAM_chemoscapes/modelSr_414.gri')
+Sr.er<- raster('GAM_chemoscapes/er_modelSr_414.gri')
 
-Mn<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelMn_414.gri')
-Mn.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelMn_414.gri')
+Mn<- raster('GAM_chemoscapes/modelMn_414.gri')
+Mn.er<- raster('GAM_chemoscapes/er_modelMn_414.gri')
 
-Zn<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelZn_414.gri')
-Zn.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelZn_414.gri')
+#Zn<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelZn_414.gri')
+#Zn.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelZn_414.gri')
 
-Rb<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelRb_414.gri')
-Rb.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelRb_414.gri')
+Rb<- raster('GAM_chemoscapes/modelRb_414.gri')
+Rb.er<- raster('GAM_chemoscapes/er_modelRb_414.gri')
 
-Li<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelLi_414.gri')
-Li.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelLi_414.gri')
+#Li<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelLi_414.gri')
+#Li.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelLi_414.gri')
 
-Sc<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelSc_414.gri')
-Sc.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSc_414.gri')
+#Sc<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelSc_414.gri')
+#
+#Sc.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSc_414.gri')
 
 
 
@@ -194,29 +198,29 @@ Sc.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSc
 # #Na3d.big<-aggregate(Na3d, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # #Na3der.big<-aggregate(Na3der, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
-# distNa.big<-aggregate(distNa, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distNa<-aggregate(distNa, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # distNaer.big<-aggregate(distNaer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
 # distMg.big<-aggregate(distMg, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
-# distMger.big<-aggregate(distMger, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distMg.er<-aggregate(distMger, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
 # distP.big<-aggregate(distP, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # distPer.big<-aggregate(distPer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
-# distBa.big<-aggregate(distBa, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
-# distBaer.big<-aggregate(distBaer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distBa<-aggregate(distBa, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distBa.er<-aggregate(distBaer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
-# distSr.big<-aggregate(distSr, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
-# distSrer.big<-aggregate(distSrer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distSr<-aggregate(distSr, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distSr.er<-aggregate(distSrer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
-# distMn.big<-aggregate(distMn, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
-# distMner.big<-aggregate(distMner, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distMn<-aggregate(distMn, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
+# distMn.er<-aggregate(distMner, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
 # distCu.big<-aggregate(distCu, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # distCuer.big<-aggregate(distCuer, fact=4, fun=mean, expand=TRUE, na.rm=TRUE)
 # 
 # 
-# stk<-stack(distNa.big, distNaer.big, distMg.big, distMger.big, distP.big, distPer.big, distBa.big, distBaer.big, distSr.big, distSrer.big, distMn.big, distMner.big, distCu.big, distCuer.big) # make a raster stack form the above
+# stk<-stack(distNa, distNaer.big, distMg.big, distMg.er, distP.big, distPer.big, distBa, distBa.er, distSr, distSr.er, distMn, distMn.er, distCu.big, distCuer.big) # make a raster stack form the above
 # 
 # 
 # param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
@@ -255,14 +259,14 @@ Sc.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSc
 # 
 # head(param)
 # 
-# image(distNa.big, main=' an example of one elements means')
+# image(distNa, main=' an example of one elements means')
 # ##turn ll into sp object
 # coords.tmp<- cbind(param$x, param$y)
 # ## create spdf object
 # ll.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(param),
 #                                    proj4string = CRS(mrc))
 # #then rasterise and the ll sp object
-# ll.r<- raster(distNa.big)
+# ll.r<- raster(distNa)
 # ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 # 
 # #plot the likelihood surface
@@ -295,37 +299,27 @@ Sc.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSc
 
 # add in measurment error to error surface
 ```{r}
-par(mfrow=c(1,1))
-
-Napool<- sqrt(Na.er+24.93217)
-Mgpool<- sqrt(Mg.er+48.21544)
-Ppool<- sqrt(P.er+690.9266)
-Bapool<- sqrt(Ba.er+1.4901)
-Srpool<- sqrt(Sr.er+1.40914)
-Mnpool<- sqrt(Mn.er+0.6332)
-Znpool<- sqrt(Zn.er+7.0531)
-Rbpool<- sqrt(Rb.er+301.1896)
-Lipool<- sqrt(Li.er+1.425543)
-
-plot(Napool)
-plot(Mgpool)
-plot(Ppool)
-plot(Bapool)
-plot(Srpool)
-plot(Mnpool)
-plot(Znpool)
-plot(Rbpool)
-plot(Lipool)
+# par(mfrow=c(1,1))
+# 
+# Napool<- sqrt(Na.er+24.93217)
+# Mgpool<- sqrt(Mg.er+48.21544)
+# Bapool<- sqrt(Ba.er+1.4901)
+# Srpool<- sqrt(Sr.er+1.40914)
+# Mnpool<- sqrt(Mn.er+0.6332)
+# Rbpool<- sqrt(Rb.er+301.1896)
+# 
+# plot(Napool)
+# plot(Mgpool)
+# plot(Ppool)
+# plot(Bapool)
+# plot(Srpool)
+# plot(Mnpool)
+# plot(Znpool)
+# plot(Rbpool)
+# plot(Lipool)
 
 
 ```
-
-
-
-
-
-
-
 
 
 
@@ -353,7 +347,7 @@ mid= cbind(x=-722018.2, y=7704320) # mid inshore coords
 
 #ed4.14<- droplevels(ed4.14)
 
-n=mean(table(ed4.14$Haul_id))
+n=mean(table(ed4.14$HaulID))
 
 
 #########################These are the origionals just in case something went wrong###########################
@@ -409,26 +403,26 @@ n=mean(table(ed4.14$Haul_id))
 
 # Make data larger sclae to speed up the process
 # 
-#   Na.big<-aggregate(Na, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
-#   Naer.big<-aggregate(Na.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Na<-aggregate(Na, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#  Na.er<-aggregate(Na.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
-#   Mg.big<-aggregate(Mg, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
-#   Mger.big<-aggregate(Mg.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#  Mg<-aggregate(Mg, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Mg.er<-aggregate(Mg.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
-#   Ba.big<-aggregate(Ba, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
-#   Baer.big<-aggregate(Ba.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Ba<-aggregate(Ba, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Ba.er<-aggregate(Ba.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
-#   Sr.big<-aggregate(Sr, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
-#   Srer.big<-aggregate(Sr.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Sr<-aggregate(Sr, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Sr.er<-aggregate(Sr.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
-#   Mn.big<-aggregate(Mn, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
-#   Mner.big<-aggregate(Mn.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Mn<-aggregate(Mn, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Mn.er<-aggregate(Mn.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
 #   Cu.big<-aggregate(Cu, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 #   Cuer.big<-aggregate(Cu.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
-#   Rb.big<-aggregate(Rb, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
-#   Rber.big<-aggregate(Rb.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Rb<-aggregate(Rb, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
+#   Rb.er<-aggregate(Rb.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 # # # 
 #   Li.big<-aggregate(Li, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 #   Lier.big<-aggregate(Li.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
@@ -436,75 +430,78 @@ n=mean(table(ed4.14$Haul_id))
 #   Sc.big<-aggregate(Sc, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 #   Scer.big<-aggregate(Sc.er, fact=2, fun=mean, expand=TRUE, na.rm=TRUE)
 
-cut<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/all_area_cut')
-#plot(cut)
+cut<- raster('model_landscape')
+plot(cut)
 # ## or try at the normal scale
 ########note try without the pooled varience
-   Na.big<-Na
-   Naer.big<-Na.er
-  # Naer.big<-Napool
+   #Na.big<-Na
+  #Na.er<-Na.er
+  ############################Na.er<-Napool
 # # # 
-   Mg.big<-Mg
-   Mger.big<-Mg.er
-  #Mger.big<-Mgpool
+ # Mg<-Mg
+  # Mg.er<-Mg.er
+  ############################Mg.er<-Mgpool
 # # # 
-   P.big<-P
-  Per.big<- P.er
-  # Per.big<- Ppool
+   #P.big<-P
+ #Per.big<- P.er
+ ###################### # Per.big<- Ppool
 # # # 
-   Ba.big<-Ba
-    Baer.big<-Ba.er
-  # Baer.big<-Bapool
+   #Ba<-Ba
+    #Ba.er<-Ba.er
+  ###################### Ba.er<-Bapool
 # # # 
-   Sr.big<-Sr
-   Srer.big<-Sr.er
-  # Srer.big<-Srpool
+   #Sr<-Sr
+  # Sr.er<-Sr.er
+  ################### Sr.er<-Srpool
 # #  
-   Mn.big<-Mn
-   Mner.big<-Mn.er
-  # Mner.big<-Mnpool
+   #Mn<-Mn
+  # Mn.er<-Mn.er
+ ################ # Mn.er<-Mnpool
 # # # 
-   Zn.big<-Zn
-   Zner.big<-Zn.er
-   #Zner.big<-Znpool
+   #Zn.big<-Zn
+  # Zner.big<-Zn.er
+  ###################### #Zner.big<-Znpool
 # # # 
-   Rb.big<-Rb
-  Rber.big<-Rb.er
-   #Rber.big<-Rbpool
+  # Rb<-Rb
+  #Rb.er<-Rb.er
+   ###############Rb.er<-Rbpool
 # # # 
-   Li.big<-Li
-   Lier.big<-Li.er
-  # Lier.big<-Lipool
+  # Li.big<-Li
+  # Lier.big<-Li.er
+  ################# Lier.big<-Lipool
 
 
 
 
-stk<-stack(Na.big, Naer.big, Mg.big, Mger.big, P.big, Per.big,  Ba.big, Baer.big, Sr.big, Srer.big,  Mn.big, Mner.big, Zn.big, Zner.big, Rb.big, Rber.big, Li.big, Lier.big) # make a raster stack form the above
+stk<-stack(Na,Na.er,Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 # cut the stack to the smaller extent
 #stk<- stk*cut
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
-names(param)[3:20]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanP', 'sdP','meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn', 'meanZn', 'sdZn', 'meanRb', 'sdRb', 'meanLi', 'sdLi')
+names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
+
 param<- cbind(param, ll=NA) # add the log likelyhood column
 head(param)
 Acc<- data.frame(ID=NA, thresh=NA, area.thresh=NA)
 
-d=NA #vector to store geographic dists in
+
+  d=NA #vector to store geographic dists in
 din=NA # vector to store geographic dists for inshore in
 dll=NA # vector to store vertical distances in
 
-samps= 1000
+samps= 10
 first.run<- TRUE
+
 
 for (j in 1:samps)
 {
   
 ## pull a sample row from data
 samp<- ed4.14[sample(nrow(ed4.14), 1, replace =TRUE), ]
-answer= samp$region # save the answer row for later
+#answer= samp$region # save the answer row for later
 
 # make sample into an sp object and project
-coords.tmp<- cbind(samp$long, samp$lat)
+coords.tmp<- cbind(samp$Longitude, samp$Latitude)
 ## create spdf object
 samp.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(samp),
                                    proj4string = CRS(WGS84))
@@ -519,13 +516,13 @@ samp.spdfT<- spTransform(samp.spdf, CRS(mrc))
   {
      Na.param <- ll.norm(parameters=c(param$meanNa[i],param$sdNa[i]), thedata=samp$Na)
      Mg.param <- ll.norm(parameters=c(param$meanMg[i],param$sdMg[i]), thedata=samp$Mg)
-     P.param <- ll.norm(parameters=c(param$meanP[i],param$sdP[i]), thedata=samp$P)
+     ###P.param <- ll.norm(parameters=c(param$meanP[i],param$sdP[i]), thedata=samp$P)
      Ba.param <- ll.gam(parameters=c(param$meanBa[i],param$sdBa[i]), thedata=samp$Ba)
      Sr.param <- ll.norm(parameters=c(param$meanSr[i],param$sdSr[i]), thedata=samp$Sr)
      Mn.param <- ll.gam(parameters=c(param$meanMn[i],param$sdMn[i]), thedata=samp$Mn)
-     Zn.param <- ll.gam(parameters=c(param$meanZn[i],param$sdZn[i]), thedata=samp$Zn)
+     ####Zn.param <- ll.gam(parameters=c(param$meanZn[i],param$sdZn[i]), thedata=samp$Zn)
      Rb.param <- ll.gam(parameters=c(param$meanRb[i],param$sdRb[i]), thedata=samp$Rb)
-     Li.param <- ll.gam(parameters=c(param$meanLi[i],param$sdLi[i]), thedata=samp$Li)
+    ##### Li.param <- ll.gam(parameters=c(param$meanLi[i],param$sdLi[i]), thedata=samp$Li)
     
   
     # optimal sets: Cl:  Rb, Sc
@@ -534,7 +531,7 @@ samp.spdfT<- spTransform(samp.spdf, CRS(mrc))
     #               Offshore: Na Rb Sc
     #               Inshore:Na Mg Cu Rb
     
-    param[i,21]<- (#Na.param +
+    param[i,15]<- (#Na.param +
                     #Mg.param +
                   #P.param+
                      # Ba.param+
@@ -555,7 +552,7 @@ ll.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(param),
                                    proj4string = CRS(mrc))
 
 #then rasterise and the ll sp object
-ll.r<- raster(Na.big)
+ll.r<- raster(Na)
 ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 #ll.r<- exp(ll.r)
 #plot the likelihood surface
@@ -576,8 +573,8 @@ image(samp.r, add=T, col = 'blue') # plot the truth
 
 d[j]<- dist(rbind(corr@coords,samp.spdfT@coords), method = "euclidean")
 ## for inshore area use
-din[j]<- dist(rbind(corr@coords,mid), method = "euclidean")
-dll[j]<- (maxValue(mask(ll.r, corr.r)) - maxValue(mask(ll.r, samp.r)))^2
+#din[j]<- dist(rbind(corr@coords,mid), method = "euclidean")
+#dll[j]<- (maxValue(mask(ll.r, corr.r)) - maxValue(mask(ll.r, samp.r)))^2
 
 #llScale<- scale(ll.r, center=F, scale=maxValue(ll.r))
 
@@ -605,6 +602,8 @@ if (first.run)
 answer
 
 }
+
+
 Precis<- seq(from=0, to = 1, by= 0.01)
   Acur=NA
 for (l in 1:length(Precis)) {
