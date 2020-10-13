@@ -1,0 +1,381 @@
+---
+title: "Elemental map"
+author: "Neil"
+date: "17 March 2017"
+output:
+    ]
+  html_document: 
+  pandoc_args: [
+      "+RTS", "-K64m",
+      "-RTS"
+editor_options: 
+  chunk_output_type: console
+---
+
+#Setup
+code not shown
+import data, set hooks for webgl, subset edges and times, remove any 'n' using 'use column, make sure time points are correct
+```{r include=FALSE}
+
+
+rm(list=ls())
+# getwd tells us where R is looking
+getwd()
+#setwd tells R where to look
+
+### not all packages are required
+library(AID)
+library(vegan)
+library(MASS)
+library(corrplot)
+library(fields)
+library(PMCMRplus)
+library(gamm4)
+library(GISTools)
+library(maps)
+library(mapdata)
+library(PBSmapping)
+library(plyr)
+library(raster)
+library(rgdal)
+library(RColorBrewer)
+library(rgeos)
+library(rasterVis)
+library(rgl)
+#library(gstat)
+library(sampling)
+library(pROC)
+library(flux)
+
+
+
+
+## dat<- read.csv(LOAD THE DATA)
+
+## subset the data to extract Age 0 2014 edge data
+ed4.14<- subset(dat, dat$Sample=='Age-0_edge')
+head(ed4.14)
+
+
+
+## spatial extent etc set-up
+# 
+full.ext<- extent(c(-8, -3, 52, 60))
+###coord system to assign
+WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
+#### projection
+mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
+
+
+### region was used in earlier iterations of the code and I retained it here. It is just a factor of Haul ID thought
+region<-as.factor(ed4.14$HaulID)
+
+ ed4.14<-cbind(ed4.14, region)
+
+```
+
+# pull in surfaces and er
+```{r}
+
+#### these rasters can be generated from code chunk "Step1 - Fit spatial GAM to otolith chemistry". They are also available in the folder in this archive
+# smoothed rasters
+#normal
+Na<- raster('GAM_chemoscapes/modelNa_414.gri')
+Na.er<- raster('GAM_chemoscapes/er_modelNa_414.gri')
+
+Mg<- raster('GAM_chemoscapes/modelMg_414.gri')
+Mg.er<- raster('GAM_chemoscapes/er_modelMg_414.gri')
+
+Ba<- raster('GAM_chemoscapes/modelBa_414.gri')
+Ba.er<- raster('GAM_chemoscapes/er_modelBa_414.gri')
+
+Sr<- raster('GAM_chemoscapes/modelSr_414.gri')
+Sr.er<- raster('GAM_chemoscapes/er_modelSr_414.gri')
+
+Mn<- raster('GAM_chemoscapes/modelMn_414.gri')
+Mn.er<- raster('GAM_chemoscapes/er_modelMn_414.gri')
+
+
+Rb<- raster('GAM_chemoscapes/modelRb_414.gri')
+Rb.er<- raster('GAM_chemoscapes/er_modelRb_414.gri')
+
+
+```
+
+
+#LL 
+```{r}
+
+
+
+
+par(mfrow=c(1,1))
+
+#### try by region
+summary(ed4.14$region)
+
+
+n=mean(table(ed4.14$HaulID)) ### set mean sample number 
+
+
+### Normal and Gamma likelihood functions
+
+ ll.norm <- function(parameters, thedata)
+   {
+   ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
+  return(ll)
+ }
+# 
+# ## log likelihood function for gamma distribution elements
+ ll.gam <- function(parameters, thedata)
+   {
+   ll <- (dgamma(thedata, rate=parameters[1]/((parameters[2]^2)*n), shape=(parameters[1]^2)/((parameters[2]^2)*n), log=TRUE))
+   return(ll)
+ }
+
+
+
+
+ 
+ #### the model landscape was created previously but is also in the folder in this archive
+cut<- raster('model_landscape')
+plot(cut)
+
+
+stk<-stack(Na,Na.er,Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
+# cut the stack to the smaller extent if required
+#stk<- stk*cut
+param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
+
+names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
+
+param<- cbind(param, ll=NA) # add the log likelihood column
+head(param)
+Acc<- data.frame(ID=NA, thresh=NA, area.thresh=NA)
+
+
+  d=NA #vector to store geographic dists in
+din=NA # vector to store geographic dists for inshore in
+dll=NA # vector to store vertical distances in
+
+samps= 10
+first.run<- TRUE
+
+
+for (j in 1:samps)
+{
+  
+## pull a sample row from data
+samp<- ed4.14[sample(nrow(ed4.14), 1, replace =TRUE), ]
+answer= samp$region # save the answer row for later
+
+# make sample into an sp object and project
+coords.tmp<- cbind(samp$Longitude, samp$Latitude)
+## create spdf object
+samp.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(samp),
+                                   proj4string = CRS(WGS84))
+samp.spdfT<- spTransform(samp.spdf, CRS(mrc))
+
+
+# a loop to estimate likelihood of the data given the parameters and add it to the ll column of param
+
+  for(i in 1:nrow(param))
+  
+ 
+  {## code for all elements is here but use the list below to extract the ones to test
+     Na.param <- ll.norm(parameters=c(param$meanNa[i],param$sdNa[i]), thedata=samp$Na)
+     Mg.param <- ll.norm(parameters=c(param$meanMg[i],param$sdMg[i]), thedata=samp$Mg)
+     Ba.param <- ll.gam(parameters=c(param$meanBa[i],param$sdBa[i]), thedata=samp$Ba)
+     Sr.param <- ll.norm(parameters=c(param$meanSr[i],param$sdSr[i]), thedata=samp$Sr)
+     Mn.param <- ll.gam(parameters=c(param$meanMn[i],param$sdMn[i]), thedata=samp$Mn)
+     Rb.param <- ll.gam(parameters=c(param$meanRb[i],param$sdRb[i]), thedata=samp$Rb)
+
+  
+    
+    param[i,15]<- (#Na.param +
+                    #Mg.param +
+                   # Ba.param+
+                     Sr.param +
+                      Mn.param 
+                      # Rb.param 
+                     )
+  }
+
+
+
+##turn ll into sp object
+coords.tmp<- cbind(param$x, param$y)
+## create spdf object
+ll.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(param),
+                                   proj4string = CRS(mrc))
+
+#then rasterise and the ll sp object
+ll.r<- raster(Na)
+ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
+
+
+#plot the likelihood surface
+image(ll.r, main=paste('blue=Truth, Circ=estimate',j, sep=" "))
+points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
+
+##save likelyhood surfaces into a folder if required for later
+#writeRaster(ll.r, file=paste('file path', j, sep="_"), format = 'raster', overwrite=T)
+
+
+corr<- subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE))
+corr.r<- rasterize(corr, ll.r, field='meanNa', fun=mean)
+samp.r<- rasterize(samp.spdfT, ll.r, field='Na', fun=mean)
+
+image(samp.r, add=T, col = 'blue') # plot the truth
+
+
+d[j]<- dist(rbind(corr@coords,samp.spdfT@coords), method = "euclidean")
+
+
+Acc$thresh<- qnorm(
+                  pnorm(extract(ll.r, samp.spdfT, cellnumbers=TRUE)[2], cellStats(ll.r, 'mean'), cellStats(ll.r, 'sd')), cellStats(ll.r, 'mean'), cellStats(ll.r, 'sd'))
+
+Acc$ID<- as.character(samp.spdfT$OtolithID)
+
+fun<- function(x) {ifelse(x<Acc$thresh, NA, x)}
+
+
+ll10<- calc(ll.r, fun=fun)
+
+Acc$area.thresh<- cellStats(!is.na(ll10), 'sum')/cellStats(!is.na(ll.r), 'sum')
+
+if (first.run)
+{
+ Acc.df<- Acc 
+  first.run<- FALSE
+} else {
+  Acc.df<- rbind(Acc.df, Acc)
+  
+}
+
+
+answer
+
+}
+
+
+
+
+
+
+Precis<- seq(from=0, to = 1, by= 0.01)
+  Acur=NA
+for (l in 1:length(Precis)) {
+  Acur[l]<- sum(Acc.df$area.thresh< Precis[l])/nrow(Acc.df)
+  
+}
+
+
+plot(Precis, Acur, type ='l', xlab='Precision', ylab='Accuracy', xaxt='n', ylim=c(0,1))
+axis(1, at=c(0.0,0.2,0.4,0.6,0.8,1.0))
+abline(a=0, b=1)
+
+
+length(which(d/1000 <= 100))/samps*100# percentage correct within 100km
+length(which(d/1000 <= 150))/samps*100# percentage correct within 150km
+length(which(d/1000 <= 175))/samps*100# percentage correct within 175km
+#length(which(d/1000 <= 200))/samps*100# percentage correct within 200km
+mean(d)/1000
+#max(d)/1000
+flux::auc(Precis, Acur)
+## AUC was 0.95
+
+
+theta<- Acur + rev(Precis)
+which(theta==max(theta), arr.ind=T)
+n <- length(theta)
+max<- sort(theta)[n]
+
+
+x.tmp<-Precis[which(theta==max, arr.ind=T)]
+y.tmp<- Acur[which(theta==max, arr.ind=T)]
+points(x.tmp, y.tmp, col='green')
+
+accs<- cbind(Precis, Acur)
+
+
+########### save accuracy for work later reimport and calculate 
+#write.csv(accs, 'file path')
+ ## use this file - open in excell match the closest accuracy figure to percentage 80 and 90%  and add to below code
+#abline(a=0.7, b=1)
+
+### look to see what precision is at 90% acc and 80% acc
+##########accs414<-read.csv('file path')
+
+#75%
+#Precis[which(Acur==0.7, arr.ind=T)]
+
+int<- accs414$Acur[which.min(abs(accs414$Acur - 0.75))]
+accs414$Precis[which(accs414$Acur==int, arr.ind=T)]
+# answer = 0.02
+
+#80%
+#Precis[which(Acur==0.799, arr.ind=T)]
+
+int<- accs414$Acur[which.min(abs(accs414$Acur - 0.8))]
+accs414$Precis[which(accs414$Acur==int, arr.ind=T)]
+
+#anwer = 0.03
+
+#90%
+#Precis[which(Acur==0.897, arr.ind=T)]
+
+int<- accs414$Acur[which.min(abs(accs414$Acur - 0.9))]
+accs414$Precis[which(accs414$Acur==int, arr.ind=T)]
+ # answer = 0.09
+
+```
+
+
+#plot of acc vs prec
+```{r}
+
+Precis<- seq(from=0, to = 1, by= 0.01)
+  Acur=NA
+for (l in 1:length(Precis)) {
+  Acur[l]<- sum(Acc.df$area.thresh< Precis[l])/nrow(Acc.df)
+  
+}
+
+
+plot(Precis, Acur, type ='l', xlab='Precision', ylab='Accuracy', xaxt='n')
+axis(1, at=c(0.0,0.2,0.4,0.6,0.8,1.0))
+abline(a=0, b=1)
+
+flux::auc(Precis, Acur)
+## theta= the value or precis + acur. The maximum theta = optimal vaue to use as a threshold
+theta<-  Acur + rev(Precis)
+which(theta==max(theta), arr.ind=T)
+n <- length(theta)
+max<- sort(theta)[n]
+#max<-sort(theta,partial=n-1)[n-1]
+
+x.tmp<-Precis[which(theta==max, arr.ind=T)]
+y.tmp<- Acur[which(theta==max, arr.ind=T)]
+points(x.tmp, y.tmp, col='green')
+
+accs<- cbind(Precis, Acur)
+#write.csv(accs, 'F:/R_script/Microchemistry/Elemental_maps/accs414.csv')
+ ## use this file - open in excell match the closest accuracy figure to percentage 80 and 90%  and add to below code
+abline(a=0.7, b=1)
+
+### look to see what precision is at 90% acc and 80% acc
+
+#75%
+Precis[which(Acur==0.763, arr.ind=T)]
+#80%
+Precis[which(Acur==0.799, arr.ind=T)]
+
+#90%
+Precis[which(Acur==0.897, arr.ind=T)]
+
+
+```
+
+
+#end

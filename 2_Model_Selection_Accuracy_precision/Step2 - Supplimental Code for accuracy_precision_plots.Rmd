@@ -22,58 +22,38 @@ rm(list=ls())
 # getwd tells us where R is looking
 getwd()
 #setwd tells R where to look
-#setwd('/Volumes/PHD/R_script/Microchemistry/Dec2016')
+#setwd('file path')
 
 
-setwd("E:/Otolith_chem_paper/Elemental_maps")
 
-dat<- read.csv('chem414.csv')
 library(AID)
 library(vegan)
 library(MASS)
 library(corrplot)
 library(fields)
-library(PMCMR)
+library(PMCMRplus)
 library(gamm4)
 library(GISTools)
-library(SDMTools)
 library(maps)
 library(mapdata)
 library(PBSmapping)
 library(plyr)
 library(raster)
 library(rgdal)
-library(spatial.tools)
 library(RColorBrewer)
 library(rgeos)
 library(rasterVis)
 library(rgl)
-#library(gstat)
 library(sampling)
 library(pROC)
 library(flux)
 
-source("sdm_functions.R")
+## dat<- read.csv(LOAD THE DATA)
 
-## spatial extent etc set-up
-# 
-# full.ext<- extent(c(-8, -3, 52, 60))
-# ###coord system to assign
-# WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
-# #### projection
-# mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
-# bathT<- raster('F:/R_script/SDM/full_area_time/layers_output/bath.grd')
-# base<- readOGR(dsn='F:/R_script/SDM', layer="full")
-# 
-# land<- readOGR(dsn= "F:/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
-# land<- spTransform(land, CRS(WGS84))
-# land<- crop(land, full.ext)
-# base<- crop(base, full.ext)
-# 
-# 
-# landT<- spTransform(land, CRS(mrc))
-# baseT<- spTransform(base, CRS(mrc))
-# bathT<- crop(bathT, landT)# crop this here as it has already been transformed
+## subset the data to extract Age 0 2014 edge data
+ed4.14<- subset(dat, dat$Sample=='Age-0_edge')
+head(ed4.14)
+
 
 ```
 
@@ -81,8 +61,7 @@ source("sdm_functions.R")
 # Precision vs acc plots
 
 ```{r}
-#acc114<-read.csv('F:/R_script/Microchemistry/Elemental_maps/accs114.csv')
-acc414<-read.csv('E:/Otolith_chem_paper/Elemental_maps/accs414.csv')
+acc414<-read.csv('file path for previous accuracy csv')
 
 ### maximise theta
 theta<- acc414$Acur + rev(acc414$Precis)
