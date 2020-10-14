@@ -1,4 +1,6 @@
-# Element_Chemoscape_geolocation20
+# Element_Chemoscape_geolocation2
+https://zenodo.org/badge/latestdoi/281963681
+
 The code includes chemoscape creation and geolocation from otolith element concentrations. The dataset can be downloaded from the following repository:
 
 https://doi.org/10.5525/gla.researchdata.1040
