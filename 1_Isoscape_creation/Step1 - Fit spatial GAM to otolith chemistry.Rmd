@@ -1,5 +1,7 @@
 ---
 title: "Step1 - Fit spatial GAM to otolith chemistry"
+author: "Neil M. Burns"
+date: "Updated 14 October 2020"
 output: html_document
 editor_options: 
   chunk_output_type: console

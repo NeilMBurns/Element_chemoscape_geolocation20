@@ -1,8 +1,8 @@
 ---
 title: "Microchemistry discrimination"
-author: "Neil"
-date: "20 January 2017"
 output: html_document
+author: "Neil M. Burns"
+date: "Updated 14 October 2020"
 editor_options: 
   chunk_output_type: console
 ---
@@ -15,21 +15,18 @@ getwd()
 #setwd('file path')
 
 
-#setwd("I:/Otolith_chem_paper/Elemental_maps")
 
-#dat<- read.csv('chem2017_Tidy.csv')
 library(AID)
 library(vegan)
 library(MASS)
 library(corrplot)
 library(fields)
 require(randomForest)
-library(PMCMR)
+library(PMCMRplus)
 library(gamm4)
 library(mvabund)
 library(KernSmooth)
 library(GISTools)
-library(SDMTools)
 library(maps)
 library(mapdata)
 library(RgoogleMaps)
@@ -37,7 +34,6 @@ library(PBSmapping)
 library(plyr)
 library(raster)
 library(rgdal)
-library(spatial.tools)
 library(RColorBrewer)
 library(rgeos)
 library(rasterVis)
@@ -50,82 +46,12 @@ library(Rfast)
 library(sampSurf)
 
 ## dat<- read.csv(LOAD THE DATA)
-dat<- read.csv('C:/Users/neilm/Documents/GitHub/Element_Isoscape_geolocation20/Data_1040.csv')
-table(dat[,1])
 ## subset the data to extract Age 1 2015 otolith samples from October 2014 time point ablation pit
 int<- subset(dat, dat$Sample=='Age-1_Oct_equiv')
 head(int)
 
-### summary data for methods
-#summary(dat)
-#levels(dat$ID)
-#names(dat)
 
-#dat<- subset(dat, dat$use=='y')
-#summary(dat$Area)
-#max(dat$Pit_no)
-#min(dat$Pit_no)
-# subset for the time points we want
-# and get the edge data
-
-
-#all1.15<- subset(dat, dat$sample_time ==1.15)
-#all1.15<- subset(all1.15, all1.15$Age =='1')
-
-#all1.15<- droplevels(all1.15)
-#(unique(all1.15$ID))
-
-
-#edge<- subset(all1.15, all1.15$Reverse_pit_no=='1')
-#table(edge$Haul_id)
-#sum(as.vector(table(edge$Haul_id)))
-#table(edge$Sex)
-
-#names(all1.15)
-#summary(all1.15$pred_month)
-
-# select Sept, Oct, Nov
-
-#int<- subset(all1.15,   all1.15$pred_month=='Sep' | all1.15$pred_month=='Oct' )
-#int<- droplevels(int)
-#str(int)
-#int$Mn_0<- as.numeric(as.character(int$Mn_0))
-
-##(int$pred_month)
-# there may be multiple samples from one otolith
-#table(int$OtolithID)
-#sum(table(int$ID))
-#length(unique(int$ID))# these 2 lines will check that by trimming out months I'm not loosing data
-#unique(int$ID)
-#table(int$Sex)
-#set.seed(666)
-#s1 <- sampling::strata(int, stratanames="ID", size=rep(1, length(unique(int$ID))), method="srswr") 
-#int<-int[s1[,2],]
-
-#table(int$ID)
-#unique(int$ID)
-#table(int$ID)
-#head(int)
-#nrow(int)
-
-####I looked at the mapped haul_id s and assigned each to a region
-#probably want to remove the two south east IS ones 137 and 133 - also 126 might be odd too
-#int<- subset(int, int$Haul_id !='133')
-#int<- subset(int, int$Haul_id !='137')
-
- #table(int$HaulID)
-# chem<- subset(chem, chem$HaulF !='133')
-# chem<- subset(chem, chem$HaulF !='137')
-# chem<- subset(chem, chem$HaulF !='118')
-# chem<- subset(chem, chem$HaulF !='127')
-# chem<- subset(chem, chem$HaulF !='126')
-
-#int<- droplevels(int)
-
-
-
-
-## as before this ios really legacy code but required for later
+## as before this is really legacy code but required for later
 region<-as.factor(int$HaulID)
 
 int<-cbind(int, region)
@@ -135,429 +61,28 @@ int<-cbind(int, region)
 
 #Data sorting as per step2 (414)
 ```{r}
-# Go through each element in turn, check for normality, growth relationship and correct
-# no point doing them all might as well only do the ones included in the model.... Sr+ Mn
 
-
-#Na
- 
- # hist(int$Na)
- # shapiro.test(int$Na)  ## Normal 
- # qqnorm(int$Na); qqline(int$Na, col = 2)
- # 
- 
-#  
-#  
-# # growth relationship
-#  plot(Na~Dist_to_pit, data=int)
-#  lineNa<- lm(Na~Dist_to_pit, data=int) ##  Sig
-#  summary(lineNa)
-#  abline(lineNa)
-#  
-#   #NaCor<- lineNa$residuals
- #hist(NaCor)
 
 ##### Keep things tidy by creating a data frame with the elements from the optimal model
 
  chem<- data.frame('ID'= int$OtolithID)
- #chem<- data.frame('ID'= int$ID, 'Na'= int$Na)
-# 
-# 
-# #Mg
-# hist(ed4.14$Mg)
-# shapiro.test(ed4.14$Mg)  ##Normal
-# qqnorm(ed4.14$Mg); qqline(ed4.14$Mg, col = 2)
-# 
-# 
-# plot(Mg~Dist_to_pit, data=ed4.14)
-# lineMg<- lm(Mg~Dist_to_pit, data=ed4.14) ## non-Sig
-# summary(lineMg)
-# abline(lineMg)
-# 
-# chem<- cbind(chem, 'Mg'=int$Mg)
-# 
-# 
-# #P
- #summary(int$P)
-
-#hist(int$P)
-#shapiro.test(int$P)  ##Normal - no need to transform
-#qqnorm(int$P); qqline(int$P, col = 2)
- ## apply previous transformation
-
-
-
-#chem<- cbind(chem, 'P'=int$P)
-
-#Ba
-
- #summary(int$Ba)
-
-#hist(int$Ba)
-#shapiro.test(int$Ba)  
-#qqnorm(int$Ba); qqline(int$Ba, col = 2)
- ## apply previous transformation
-## apply previous transformation
-
-#Baa<- ((int$Ba^-0.4)-1)/-0.4 # this follows the previous transformation applied
-#hist(Baa)
-#shapiro.test(Baa)  
-#qqnorm(Baa); qqline(Baa, col = 2)
-
-
-#chem<- cbind(chem, 'Ba'=int$Ba)
-# 
-# hist(ed4.14$Ba)
-# shapiro.test(ed4.14$Ba)  ##Non-Normal
-# qqnorm(ed4.14$Ba); qqline(ed4.14$Ba, col = 2)
-# 
-# #normalise
-# Baout<- boxcoxnc(ed4.14$Ba)
-# BaT<-Baout$tf.data
-# shapiro.test(BaT)
-# qqnorm(BaT); qqline(BaT, col = 2)   ##Normal
-# hist(BaT)
-# 
-# 
-# plot(BaT~Dist_to_pit, data=ed4.14)
-# lineBaT<- lm(BaT~Dist_to_pit, data=ed4.14) ## Sig
-# summary(lineBaT)
-# abline(lineBaT)
-# 
-# # corect for length
-# 
-# BaCor<- lineBaT$residuals
-# 
-# hist(BaCor)
-# shapiro.test(BaCor)  ##Normal
-# qqnorm(BaCor); qqline(BaCor, col = 2)
-# 
-# chem<- cbind(chem, BaCor)
-
-#Sr
-summary(int$Sr)
-hist(int$Sr)
-shapiro.test(int$Sr)  ## not-Normal
-shapiro.test(rnorm(50,5,2.5))
-qqnorm(int$Sr); qqline(int$Sr, col = 2)
-
-# 
-# 
-# plot(Sr~Dist_to_pit, data=int)
-# lineSr<- lm(Sr~Dist_to_pit, data=int) ##  Sig
-# summary(lineSr)
-# abline(lineSr)
-# 
-# SrCor<- lineSr$residuals
-# 
-# hist(SrCor)
-# shapiro.test(SrCor)  ## Normal
-# qqnorm(SrCor); qqline(SrCor, col = 2)
+ 
 
 
 chem<- cbind(chem, 'Sr'= int$Sr)
 
-#Mn 0
-summary(int$Mn)
-
-hist(int$Mn_0+0.1)
-#shapiro.test(int$Mn_0+1)  ##Non-Normal
-#qqnorm(int$Mn_0+1); qqline(int$Mn_0+1, col = 2)
-
-### apply previous transformation
-
-#Mnn<- (((int$Mn_0+1)^-0.53)-1)/-0.53 # this follows the previous transformation applied
-#hist(Mnn)
-#shapiro.test(Mnn)  ## not Normal 
-#qqnorm(Mnn); qqline(Mnn, col = 2)
 
 
 
 chem<- cbind(chem, 'Mn'= int$Mn)
 
 
-#Zn 
-# summary(ed4.14$Zn)
-# 
-# hist(ed4.14$Zn)
-# shapiro.test(ed4.14$Zn)  ##Non-Normal
-# qqnorm(ed4.14$Zn); qqline(ed4.14$Zn, col = 2)
-# 
-# #normalise
-# Znout<- boxcoxnc(ed4.14$Zn)
-# ZnT<-Znout$tf.data
-# shapiro.test(ZnT)
-# qqnorm(ZnT); qqline(ZnT, col = 2)   ##not Normal
-# hist(ZnT)
-# 
-# 
-# plot(Zn~Dist_to_pit, data=ed4.14)
-# lineZn<- lm(Zn~Dist_to_pit, data=ed4.14) ## not Sig
-# summary(lineZn)
-# abline(lineZn)
-# 
-# 
-# chem<- cbind(chem, 'Zn'=ed4.14$Zn)
-# 
-# #Ni
-# summary(ed4.14$Ni)
-# 
-# hist(ed4.14$Ni)
-# shapiro.test(ed4.14$Ni)  ##Non-Normal
-# qqnorm(ed4.14$Ni); qqline(ed4.14$Ni, col = 2)
-# 
-# #normalise
-# Niout<- boxcoxnc(ed4.14$Ni)
-# NiT<-Niout$tf.data
-# shapiro.test(NiT)
-# qqnorm(NiT); qqline(NiT, col = 2)   ## not - Normal
-# hist(NiT)
-# 
-# 
-# plot(Ni~Dist_to_pit, data=ed4.14)
-# lineNi<- lm(Ni~Dist_to_pit, data=ed4.14) ## Sig
-# summary(lineNi)
-# abline(lineNi)
-# 
-# # corect for length
-# 
-# NiCor<- lineNi$residuals
-# 
-# hist(NiCor)
-# shapiro.test(NiCor)  ##not Normal
-# qqnorm(NiCor); qqline(NiCor, col = 2)
-# 
-# 
-# chem<- cbind(chem, NiCor)
-# 
-# #Cu
-# summary(ed4.14$Cu)
-# 
-# hist(ed4.14$Cu)
-# shapiro.test(ed4.14$Cu)  ##Non-Normal
-# qqnorm(ed4.14$Cu); qqline(ed4.14$Cu, col = 2)
-# 
-# #normalise
-# Cuout<- boxcoxnc(ed4.14$Cu) 
-# CuT<-Cuout$tf.data
-# shapiro.test(CuT)
-# qqnorm(CuT); qqline(CuT, col = 2)   ## Normal
-# hist(CuT)
-# 
-# 
-# plot(CuT~Dist_to_pit, data=ed4.14)
-# lineCuT<- lm(CuT~Dist_to_pit, data=ed4.14) ## non Sig
-# summary(lineCuT)
-# abline(lineCuT)
-# 
-# 
-# 
-# chem<- cbind(chem, CuT)
-# 
-
-#Rb
-# summary(int$Rb)
-# 
-# hist(int$Rb)
-# shapiro.test(int$Rb)  ##Non-Normal
-# qqnorm(int$Rb); qqline(int$Rb, col = 2)
-
-
-
-#what distrobution
-# hist(int$Rb)
-# descdist(int$Rb, boot=500)
-# f<-fitdistr(int$Rb, 'gamma')
-# plotdist(int$Rb, distr='gamma', para=list(shape=4.2, rate=57.4))
-# rate.est<- mean(int$Rb)/var(int$Rb)
-# rate.est
-# shape.est<- (mean(int$Rb)^2)/var(int$Rb)
-# shape.est
-# plotdist(int$Rb, distr='gamma', para=list(shape=shape.est, rate=rate.est))
-
-#chem<- cbind(chem, 'Rb'=int$Rb)
-
-
-#Cr_0
-# summary(ed4.14$Cr)
-# 
-# hist(ed4.14$Cr)
-# shapiro.test(ed4.14$Cr)  ##Non-Normal
-# qqnorm(ed4.14$Cr); qqline(ed4.14$Cr, col = 2)
-# 
-# #normalise
-# Crout<- boxcoxnc(ed4.14$Cr)   ##non Normal
-# 
-# 
-# 
-# plot(Cr~Dist_to_pit, data=ed4.14)
-# lineCr<- lm(Cr~Dist_to_pit, data=ed4.14) ## non Sig
-# summary(lineCr)
-# abline(lineCr)
-# 
-# 
-# chem<- cbind(chem, 'Cr'=ed4.14$Cr_0)
-
-#Li &0
-# summary(int$Li)
-# 
-# hist(int$Li_0+1)
-# shapiro.test(int$Li_0)  ##Non-Normal
-# qqnorm(int$Li_0); qqline(int$Li_0, col = 2)
-
-#normalise
-# Liout<- boxcoxnc(int$Li_0+1)   ##non Normal
-# 
-# 
-# 
-# plot(Li_0~Dist_to_pit, data=int)
-# lineLi<- lm(Li_0~Dist_to_pit, data=int) ## Sig
-# summary(lineLi)
-# abline(lineLi)
-# 
-# LiCor<- lineLi$residuals
-# 
-# #what distrobution
-# hist(int$Li_0)
-# int$Li_0<- (int$Li_0+1)
-# descdist(int$Li_0, boot=500)
-# f<-fitdistr(int$Li_0, 'gamma')
-# f
-# plotdist(int$Li_0, distr='gamma', para=list(shape=4.2, rate=57.4))
-# 
-# rate.est<- mean(int$Li_0)/var(int$Li_0)
-# rate.est
-# shape.est<- (mean(int$Li_0)^2)/var(int$Li_0)
-# shape.est
-# plotdist(int$Li_0, distr='gamma', para=list(shape=shape.est, rate=rate.est))
-
-#chem<- cbind(chem, 'Li'=int$Li_0+1)
-
-
-#Al &0
-# summary(ed4.14$Al)
-# 
-# hist(ed4.14$Al_0)
-# shapiro.test(ed4.14$Al_0)  ##Non-Normal
-# qqnorm(ed4.14$Al_0); qqline(ed4.14$Al_0, col = 2)
-# 
-# #normalise
-# Alout<- boxcoxnc(ed4.14$Al_0+1) ## non Normal
-# 
-# 
-# plot(Al_0~Dist_to_pit, data=ed4.14)
-# lineAl<- lm(Al_0~Dist_to_pit, data=ed4.14) ## Sig
-# summary(lineAl)
-# abline(lineAl)
-# 
-# 
-# chem<- cbind(chem, 'Al'=ed4.14$Al_0)
-
-#Sc &0
-# summary(int$Sc)
-# 
-# 
-# hist(int$Sc_0+1)
-# shapiro.test(int$Sc_0)  ##Non-Normal
-# qqnorm(int$Sc_0); qqline(int$Sc_0, col = 2)
-# 
-# #normalise
-# Scout<- boxcoxnc(int$Sc_0+1)   ## non Normal
-# 
-# 
-# plot(Sc_0~Dist_to_pit, data=int)
-# lineSc<- lm(Sc_0~Dist_to_pit, data=int) ## Sig
-# summary(lineSc)
-# abline(lineSc)
-# 
-# #what distrobution
-# hist(int$Sc_0)
-# int$Sc_0<- (int$Sc_0+1)
-# descdist(int$Sc_0, boot=500)
-# f<-fitdistr(int$Sc_0, 'gamma')
-# f
-# plotdist(int$Sc_0, distr='gamma', para=list(shape=3191, rate=1154))
-# 
-# rate.est<- mean(int$Sc_0)/var(int$Sc_0)
-# rate.est
-# shape.est<- (mean(int$Sc_0)^2)/var(int$Sc_0)
-# shape.est
-# plotdist(int$Sc_0, distr='gamma', demp=F, para=list(shape=shape.est, rate=rate.est))
-# 
-# 
-# chem<- cbind(chem, 'Sc'=(int$Sc_0+1))
-
-#Ti &0
-# summary(ed4.14$Ti)
-# 
-# hist(ed4.14$Ti_0)
-# shapiro.test(ed4.14$Ti_0)  ##Non-Normal
-# qqnorm(ed4.14$Ti_0); qqline(ed4.14$Ti_0, col = 2)
-# 
-# #normalise
-# Tiout<- boxcoxnc(ed4.14$Ti_0+1)##non Normal
-# 
-# 
-# plot(Ti~Dist_to_pit, data=ed4.14)
-# lineTi<- lm(Ti~Dist_to_pit, data=ed4.14) ## non Sig
-# summary(lineTi)
-# abline(lineTi)
-# 
-# 
-# chem<- cbind(chem, 'Ti'=ed4.14$Ti_0)
-# 
-# #Y &0
-# summary(ed4.14$Y)
-# 
-# 
-# hist(ed4.14$Y_0)
-# shapiro.test(ed4.14$Y_0)  ##Non-Normal
-# qqnorm(ed4.14$Y_0); qqline(ed4.14$Y_0, col = 2)
-# 
-# #normalise
-# Yout<- boxcoxnc(ed4.14$Y_0+1) ## non Normal
-# 
-# plot(Y_0~Dist_to_pit, data=ed4.14)
-# lineY<- lm(Y_0~Dist_to_pit, data=ed4.14) ## non Sig
-# summary(lineY)
-# abline(lineY)
-# 
-# 
-# chem<- cbind(chem, 'Y'=ed4.14$Y)
-# 
-# #Pb &0
-# summary(ed4.14$Pb)
-# 
-# hist(ed4.14$Pb_0)
-# shapiro.test(ed4.14$Pb_0)  ##Non-Normal
-# qqnorm(ed4.14$Pb_0); qqline(ed4.14$Pb_0, col = 2)
-# 
-# #normalise
-# Pbout<- boxcoxnc(ed4.14$Pb_0+1) ## non Normal
-# 
-# 
-# plot(Pb_0~Dist_to_pit, data=ed4.14)
-# linePb<- lm(Pb_0~Dist_to_pit, data=ed4.14) ## Sig
-# summary(linePb)
-# abline(linePb)
-# 
-# 
-# chem<- cbind(chem, 'Pb'=ed4.14$Pb)
-# 
-# head(chem)
-# summary(chem)
-# str(chem)
-# names(ed4.14)
-
-# remove the outlier from previously
-#chem<- chem[-57,]
-#ed4.14<- ed4.14[-57,]
-
 # bind some other useful stuff
 chem<- cbind(chem, 'Haul_id'= int$HaulID, 'radius' = int$Radius_to_pit, 'long'= int$Longitude, 'lat'= int$Latitude, 'HaulF'= as.factor(int$HaulID), 'region'=as.factor(int$region))
 
 table(chem$Haul_id)
-
+## for later sample size mode = 20
+n=20
 
 ```
 
@@ -574,27 +99,13 @@ full.ext<- extent(c(-10, -2, 52, 60))
 WGS84<- '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'
 #### projection
 mrc <- '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs'
-# bathT<- raster('F:/R_script/SDM/full_area_time/layers_output/bath.grd')
-# base<- readOGR(dsn='F:/R_script/SDM', layer="full")
-# 
-# land<- readOGR(dsn= "F:/R_script/SDM/my_layers_collection", layer ='Britain_Proj_Dist')
-# land<- spTransform(land, CRS(WGS84))
-# land<- crop(land, full.ext)
-# base<- crop(base, full.ext)
-# 
-# 
-# landT<- spTransform(land, CRS(mrc))
-# baseT<- spTransform(base, CRS(mrc))
-# bathT<- crop(bathT, landT)# crop this here as it has already been transformed
+
 ```
 
 
 # pull in surfaces and er
 ```{r}
 
-#fac=5
-# smoothed rasters
-#normal
 
 
 Na<- raster('GAM_chemoscapes/modelNa_414.gri')
@@ -616,149 +127,6 @@ Mn.er<- raster('GAM_chemoscapes/er_modelMn_414.gri')
 Rb<- raster('GAM_chemoscapes/modelRb_414.gri')
 Rb.er<- raster('GAM_chemoscapes/er_modelRb_414.gri')
 
-# 
-# Na<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelNa_414.gri')
-# Na.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelNa_414.gri')
-# 
-# Na<- disaggregate(Na, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Na.er<- disaggregate(Na.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Mg<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelMg_414.gri')
-# Mg.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelMg_414.gri')
-# 
-# Mg<- disaggregate(Mg, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Mg.er<- disaggregate(Mg.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# P<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelP_414.gri')
-# P.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelP_414.gri')
-# 
-# P<- disaggregate(P, fact=c(fac, round(fac/0.56)), method='bilinear')
-# P.er<- disaggregate(P.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Ba<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelBa_414.gri')
-# Ba.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelBa_414.gri')
-# 
-# Ba<- disaggregate(Ba, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Ba.er<- disaggregate(Ba.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Sr<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelSr_414.gri')
-# Sr.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSr_414.gri')
-# 
-# Sr<- disaggregate(Sr, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Sr.er<- disaggregate(Sr.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Mn<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelMn_414.gri')
-# Mn.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelMn_414.gri')
-# 
-# Mn<- disaggregate(Mn, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Mn.er<- disaggregate(Mn.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Zn<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelZn_414.gri')
-# Zn.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelZn_414.gri')
-# 
-# Zn<- disaggregate(Zn, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Zn.er<- disaggregate(Zn.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Rb<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelRb_414.gri')
-# Rb.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelRb_414.gri')
-# 
-# Rb<- disaggregate(Rb, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Rb.er<- disaggregate(Rb.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Li<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelLi_414.gri')
-# Li.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelLi_414.gri')
-# 
-# Li<- disaggregate(Li, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Li.er<- disaggregate(Li.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-# 
-# Sc<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/modelSc_414.gri')
-# Sc.er<- raster('F:/R_script/Microchemistry/elemental_maps/elem_layers/er_modelSc_414.gri')
-# 
-# Sc<- disaggregate(Sc, fact=c(fac, round(fac/0.56)), method='bilinear')
-# Sc.er<- disaggregate(Sc.er, fact=c(fac, round(fac/0.56)), method='bilinear')
-
-
-```
-
-#Plot hauls
-
-This code allows geographic identification of the hauls but requires some background maps for context
-OS boundary file of UK would do
-```{r}
-
-
-full.ext<- extent(c(-10, -2, 52, 60))
-
-# 
-# 
-# sea.spdf<- readOGR(dsn="file path", layer="basic_sea")
-# depth.sldf<- readOGR(dsn="Ffile path", layer="depth_area")
-# 
-# land.tmp<- readOGR(dsn="file path", layer="Britain_Proj_Dist")
-# land.tmp <- spTransform(land.tmp, CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")) ### re project land
-# land.spdf <- crop(land.tmp, full.ext) ## crop land down to the correct extent
-# 
-# 
-# #### initially produce a map of everywhere and all time points
-# ## bind coords into sigle object
-# coords.tmp<- cbind(int$Mid_long, int$Mid_lat)
-# ## create spdf object
-# samples.spdf<- SpatialPointsDataFrame(coords.tmp, data = data.frame(int),
-#                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
-# 
-# 
-# #### subset depth for 200m line
-# twohun.sldf <- subset(depth.sldf, depth.sldf$ELEVATION == 200)
-# onehun.sldf<- subset(depth.sldf, depth.sldf$ELEVATION == 100)
-# 
-# 
-# #par(mar = c(4,1,1,1))
-# 
-# 
-# summary(land.spdf)
-# 
-# 
-# ### plot land and sea####
-# 
-# plot(land.spdf, add = F, col = 'cornsilk', border = 'cornsilk')
-# plot(sea.spdf, add=T, col = 'cornflower blue')
-# ## axes - note this needs changed on mac for degree symbol
-# axis(1, at = c(-1:-10),labels = parse(text = paste(c(1:10), "*degree~W", sep = "")), cex.axis = 1.5, pos = 52, tck = -0.015,padj=0.2)
-# axis(2, at = seq(52,60, by= 0.5), label = F,pos = -10, tck = -0.015)
-# axis(2, at = c(52:60), labels = parse(text = paste(c(52:60), "*degree ~ N", sep = "")),tick = F, pos = -10, las = 1, cex.axis=1.5, hadj=1)
-# axis(3, labels = F, pos = 59.7, at = c(-1:-10), lwd.ticks=0)
-# axis(4, labels = F, pos = -1, at = seq(52,59.5, by= 0.5), lwd.ticks=0)
-# 
-# ## bathemetry
-# plot(onehun.sldf,add=T, col = ' lightskyblue3')
-# plot(twohun.sldf,add =T, col = 'lightskyblue4')
-# rect(-9.8, 55.7, -8.8, 56.3, col = 'cornflowerblue', border = NA )
-# rect(-9.6, 54.4, -8.8, 55.08, col = 'cornflowerblue', border = NA)
-# text(-9.2,56, labels= '200m', col ='lightskyblue4', cex = 0.8, srt = 81)
-# text(-9.35,54.8, labels= '100m', col ='lightskyblue3', cex = 0.8, srt = 65)
-# 
-# ## country names
-# text(-3.6, 57, labels = 'Scotland', srt=40)
-# text(-1.8, 54, labels = 'England', srt=50)
-# text(-6.5, 54.7, labels = 'N. Ireland', srt=-54)
-# text(-7.5, 53, labels = 'Eire')
-# text(-3.4, 53, labels = 'Wales')
-# 
-# 
-# str(int$region)
-# ### add sampling points
-# text(samples.spdf, labels=int$Haul_id)
-# #plot(samples.spdf, add =T, cex = 2.5, pch= c(15,17,19,2,3)[as.numeric(int$region)], lwd=2)
-# 
-# #legend(-2.75, 53.1,legend =levels(int$region),
-#   #     pch= c(15,17,19,2,3), cex = 1, box.col = 'black', bg = 'cornsilk', horiz = F)
-# 
-# 
-# 
-# north.arrow(xb=-9.5, yb=59, len=0.08, lab="N")
-# 
-# table(int$Haul_id)
-
 
 ```
 
@@ -774,12 +142,9 @@ chem117<- subset(chem, chem$region =='117')
 
 chem117<- droplevels(chem117)
 nrow(chem117)
-## log likelihood function 
-n=mean(table(chem117$Haul_id))
+## log likelihood functions 
 
 
-
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -794,38 +159,14 @@ n=mean(table(chem117$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  # 
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
+  
   
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -892,7 +233,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('117', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -987,10 +328,8 @@ chem118<- droplevels(chem118)
 
 
 ## log likelihood function 
-n=mean(table(chem118$Haul_id))
 
 
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -1004,39 +343,14 @@ n=mean(table(chem118$Haul_id))
    return(ll)
  }
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
+  
  
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -1101,7 +415,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('118', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -1167,7 +481,7 @@ point118T<- spTransform(point118, CRS(mrc))
 
 image(orig118, col = 'white', xaxt='n', yaxt='n',xlim=c(-1057535.2,-278298.7), ylim= c(6800125,8399738), xlab=NA, ylab=NA)
 image(orig118, col = temp(1000),  add=T)
-plot(landT, add =T, col = 'grey88')
+#plot(landT, add =T, col = 'grey88')
 plot(point118T, add=T, pch=19, col='black', cex=2)
 
 
@@ -1184,11 +498,9 @@ chem121<- subset(chem, chem$region =='121')
 chem121<- droplevels(chem121)
 nrow(chem121)
 ## log likelihood function 
-n=mean(table(chem121$Haul_id))
 
 
 
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -1203,39 +515,14 @@ n=mean(table(chem121$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
+  
   
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -1300,7 +587,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('121', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -1373,11 +660,9 @@ chem122<- subset(chem, chem$region =='122')
 chem122<- droplevels(chem122)
 nrow(chem122)
 ## log likelihood function 
-n=mean(table(chem122$Haul_id))
+#
 
 
-
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -1392,39 +677,13 @@ n=mean(table(chem122$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
-  
+ 
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -1489,7 +748,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('122', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -1562,11 +821,9 @@ chem123<- subset(chem, chem$region =='123')
 chem123<- droplevels(chem123)
 nrow(chem123)
 ## log likelihood function 
-n=mean(table(chem123$Haul_id))
 
 
 
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -1581,39 +838,13 @@ n=mean(table(chem123$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
-  
+ 
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -1678,7 +909,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('123', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -1751,11 +982,8 @@ chem124<- subset(chem, chem$region =='124')
 chem124<- droplevels(chem124)
 nrow(chem124)
 ## log likelihood function 
-n=mean(table(chem124$Haul_id))
 
 
-
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -1770,39 +998,13 @@ n=mean(table(chem124$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
-  # 
+   
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -1867,7 +1069,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('124', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -1939,11 +1141,8 @@ chem126<- subset(chem, chem$region =='126')
 chem126<- droplevels(chem126)
 nrow(chem126)
 ## log likelihood function 
-n=mean(table(chem126$Haul_id))
 
 
-
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -1958,39 +1157,14 @@ n=mean(table(chem126$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
+  
   
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -2057,7 +1231,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('126', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -2130,11 +1304,7 @@ chem127<- subset(chem, chem$region =='127')
 chem127<- droplevels(chem127)
 nrow(chem127)
 ## log likelihood function 
-n=mean(table(chem127$Haul_id))
 
-
-
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -2149,39 +1319,13 @@ n=mean(table(chem127$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
-  
+ 
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -2247,7 +1391,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('127', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -2319,11 +1463,9 @@ chem135<- subset(chem, chem$region =='135')
 chem135<- droplevels(chem135)
 nrow(chem135)
 ## log likelihood function 
-n=mean(table(chem135$Haul_id))
 
 
 
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -2338,39 +1480,13 @@ n=mean(table(chem135$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
-  
+ 
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -2437,7 +1553,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('135', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -2511,11 +1627,9 @@ chem136<- subset(chem, chem$region =='136')
 chem136<- droplevels(chem136)
 nrow(chem136)
 ## log likelihood function 
-n=mean(table(chem136$Haul_id))
 
 
 
-# #Set 1 not -pooled so in the function we change SE from the raster to var to work out rate and shape
  ll.norm <- function(parameters, thedata)
    {
    ll <- (dnorm(thedata, mean=parameters[1], sd=(parameters[2]*sqrt(n)), log=TRUE))
@@ -2530,39 +1644,13 @@ n=mean(table(chem136$Haul_id))
  }
 
 
-  #  Na<-Na
-  #  Na.er<-Na.er
-  #  
-  #  Mg<-Mg
-  # Mg.er<-Mg.er
-  # 
-  #  P.big<-P
-  #  Per.big<- P.er
-  # 
-  #  Ba<-Ba
-  # Ba.er<-Ba.er
-  # 
-  # Sr<-Sr
-  #  Sr.er<-Sr.er
-  # 
-  #  Mn<-Mn
-  #  Mn.er<-Mn.er
-  # 
-  #  Zn.big<-Zn
-  #  Zner.big<-Zn.er
-  # 
-  #  Rb<-Rb
-  #  Rb.er<-Rb.er
-  # 
-  #  Li.big<-Rb
-  #  Lier.big<-Li.er
-  
+ 
 stk<-stack(Na, Na.er, Mg, Mg.er, Ba, Ba.er, Sr, Sr.er,  Mn, Mn.er, Rb, Rb.er) # make a raster stack form the above
 
 param<- as.data.frame(stk, xy=TRUE)# change the above raster back to a dataframe to compute ll
 
 names(param)[3:14]<- c('meanNa', 'sdNa', 'meanMg', 'sdMg', 'meanBa', 'sdBa', 'meanSr', 'sdSr', 'meanMn', 'sdMn',  'meanRb', 'sdRb')
-param<- cbind(param, ll=NA) # add the log likelyhood column
+param<- cbind(param, ll=NA) # add the log likelihood column
 head(param)
 
 d=NA #vector to store geographic dists in
@@ -2628,7 +1716,7 @@ ll.r<- rasterize(ll.spdf, ll.r, field = 'll', fun = mean)
 image(ll.r, main=paste('136', j, sep=" "))
 points(subset(ll.spdf, ll.spdf$ll==max(ll.spdf$ll,na.rm = TRUE)),cex=6) # add circle for highest point
 
-##save likelyhood surfaces into a folder
+##save likelihood surfaces into a folder
 #writeRaster(ll.r, file=paste('I:/R_script/Microchemistry/elemental_maps/ass_surf/clLL', j, sep=""), format = 'raster', overwrite=T)
 
 
@@ -2693,9 +1781,9 @@ plot(point136T, add=T, pch=19, col='black', cex=2)
 
 # Save plots
 ```{r}
-# 
-#writeRaster(orig117, filename="S_Nminch117.grd", overwrite=TRUE)
-#writeRaster(orig118, filename="S_Woff118.grd", overwrite=TRUE)
+ 
+# writeRaster(orig117, filename="S_Nminch117.grd", overwrite=TRUE)
+# writeRaster(orig118, filename="S_Woff118.grd", overwrite=TRUE)
 #writeRaster(orig121, filename="S_Clyde121.grd", overwrite=TRUE)
 # writeRaster(orig122, filename="S_Jura122.grd", overwrite=TRUE)
 # writeRaster(orig123, filename="S_Sminch123.grd", overwrite=TRUE)
@@ -2703,7 +1791,6 @@ plot(point136T, add=T, pch=19, col='black', cex=2)
 # writeRaster(orig126, filename="S_EIS126.grd", overwrite=TRUE)
 # writeRaster(orig127, filename="S_NNminch127.grd", overwrite=TRUE)
 # writeRaster(orig135, filename="S_NEIS135.grd", overwrite=TRUE)
-
 # writeRaster(orig136, filename="S_WIS136.grd", overwrite=TRUE)
 
 
@@ -2711,19 +1798,19 @@ plot(point136T, add=T, pch=19, col='black', cex=2)
 ```
 
 
-#read in rasters
+#read in rasters if theyy were previously saved
 ```{r}
 
-NM<- raster("S_Nminch117.grd")/20
-Woff<- raster("S_Woff118.grd")/20
-Cl<- raster("S_Clyde121.grd")/20
-Jur<- raster("S_Jura122.grd")/20
-SM<- raster("S_Sminch123.grd")/20
-Off<- raster("S_Off124.grd")/20
-EIS<- raster("S_EIS126.grd")/20
-NNM<- raster("S_NNminch127.grd")/14
-NEIS<- raster("S_NEIS135.grd")/17
-WIS<- raster("S_WIS136.grd")/18
+ NM<- raster("LL_surf/S_Nminch117.grd")/20
+Woff<- raster("LL_surf/S_Woff118.grd")/20
+ Cl<- raster("LL_surf/S_Clyde121.grd")/20
+ Jur<- raster("LL_surf/S_Jura122.grd")/20
+ SM<- raster("LL_surf/S_Sminch123.grd")/20
+ Off<- raster("LL_surf/S_Off124.grd")/20
+ EIS<- raster("LL_surf/S_EIS126.grd")/20
+ NNM<- raster("LL_surf/S_NNminch127.grd")/14
+ NEIS<- raster("LL_surf/S_NEIS135.grd")/17
+ WIS<- raster("LL_surf/S_WIS136.grd")/18
 
 
 ```
